@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ page_title }} - LINEA{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 500px;">
+    <!-- Icon -->
+    <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 2rem; box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);">
+        <svg style="width: 48px; height: 48px; color: white;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+    </div>
+
+    <!-- Title -->
+    <h1 style="font-size: 2rem; font-weight: 600; color: #1a1a1a; margin-bottom: 0.5rem; text-align: center;">
+        {{ page_title }}
+    </h1>
+
+    <!-- Status Message -->
+    <p style="font-size: 1.125rem; color: #525252; margin-bottom: 2rem; text-align: center;">
+        W trakcie tworzenia
+    </p>
+
+    <!-- Info Box -->
+    <div style="max-width: 600px; padding: 1.5rem; background: white; border: 1px solid #e8e6e1; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);">
+        <h3 style="font-size: 1rem; font-weight: 600; color: #1a1a1a; margin-bottom: 1rem;">
+            📋 Planowane funkcjonalności:
+        </h3>
+        <ul style="list-style: none; padding: 0; margin: 0; color: #525252; line-height: 1.8;">
+            {% block todo_items %}
+            <li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">⚙️ Funkcjonalność 1</li>
+            <li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">⚙️ Funkcjonalność 2</li>
+            <li style="padding: 0.5rem 0;">⚙️ Funkcjonalność 3</li>
+            {% endblock %}
+        </ul>
+    </div>
+
+    <!-- Back Button -->
+    <a href="{{ url_for('linea.index') }}" style="margin-top: 2rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.5rem;">
+        <svg style="width: 20px; height: 20px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Powrót do LINEA
+    </a>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends 'placeholder/base_placeholder.html' %}
+
+{% set page_title = 'Wykaz zablokowanych detali' %}
+
+{% block todo_items %}
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🔍 Pobranie danych o zablokowanych detalach z MOSYS</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📊 Tabela z listą wszystkich zablokowanych detali</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🔎 Filtrowanie po: kod detalu, NR NC, zamówienie, data</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📈 Sumowanie ilości zablokowanych detali</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📅 Wyświetlanie czasu blokady (data rozpoczęcia - dzisiaj)</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">⚡ Eksport danych do Excel</li>
+<li style="padding: 0.5rem 0;">🔗 Link do szczegółów NC z modalu LINEA</li>
+{% endblock %}

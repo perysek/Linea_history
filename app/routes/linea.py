@@ -3,6 +3,7 @@ import re
 from datetime import date, timedelta
 from flask import Blueprint, render_template, request, jsonify
 from app.database import execute_query, mosys_to_date, mosys_godz, get_stampi_riparaz
+from MOSYS_data_functions import get_blocked_parts_qty
 
 linea_bp = Blueprint('linea', __name__, url_prefix='/linea')
 
@@ -92,6 +93,18 @@ def get_linea_records(start_date, end_date, search_filters=None, sort_field='DAT
 
     # Transform results
     records = []
+
+    # Get all NC numbers with their TIPO_NOTA for checking 'AC' existence
+    nc_has_ac = {}
+    for row in rows:
+        numero_nc = row.get('NUMERO_NC', '') or ''
+        tipo_nota = row.get('TIPO_NOTA', '') or ''
+        if numero_nc:
+            if numero_nc not in nc_has_ac:
+                nc_has_ac[numero_nc] = False
+            if tipo_nota == 'AC':
+                nc_has_ac[numero_nc] = True
+
     for row in rows:
         uwaga = combine_notes(row)
         nr_formy = (row.get('STAMPO_I', '') or '') + (row.get('STAMPO_P', '') or '')
@@ -99,17 +112,25 @@ def get_linea_records(start_date, end_date, search_filters=None, sort_field='DAT
         # Check if UWAGA contains CODICE_RIPARAZIONE pattern
         codice_rip = extract_codice_riparazione(uwaga)
 
+        # Check if this is a closed NC without any AC records
+        numero_nc = row.get('NUMERO_NC', '') or ''
+        tipo_nota = row.get('TIPO_NOTA', '') or ''
+        missing_ac = (tipo_nota == 'OK' and numero_nc and not nc_has_ac.get(numero_nc, False))
+
         record = {
             'COMM': row.get('COMMESSA', '') or '',
             'DATA': mosys_to_date(row.get('DATA', '')),
             'GODZ': mosys_godz(row.get('ORA', '')),
-            'NR_NIEZG': row.get('NUMERO_NC', '') or '',
-            'TYP_UWAGI': row.get('TIPO_NOTA', '') or '',
+            'DATA_RAW': row.get('DATA', '') or '',  # Raw NOTCOJAN.DATA for sorting
+            'ORA_RAW': row.get('ORA', '') or '',    # Raw NOTCOJAN.ORA for sorting
+            'NR_NIEZG': numero_nc,
+            'TYP_UWAGI': tipo_nota,
             'UWAGA': uwaga,
             'MASZYNA': row.get('PRESSA', '') or '',
             'KOD_DETALU': row.get('ARTICOLO', '') or '',
             'NR_FORMY': nr_formy,
-            'CODICE_RIPARAZIONE': codice_rip  # Add this field
+            'CODICE_RIPARAZIONE': codice_rip,
+            'MISSING_AC': missing_ac  # Flag for closed NC without AC records
         }
         records.append(record)
 
@@ -237,4 +258,78 @@ def get_riparaz_details(codice_riparazione):
             'error': str(e),
             'records': [],
             'total': 0
+        }), 500
+
+
+@linea_bp.route('/api/blocked-parts/<nr_niezg>')
+def get_blocked_parts(nr_niezg):
+    """AJAX endpoint for fetching blocked parts quantity for a NC number and related NCs."""
+    try:
+        # Get the main NC quantity
+        main_qty = get_blocked_parts_qty(nr_niezg)
+
+        # Get the COMMESSA for this NC
+        query_commessa = '''
+            SELECT NOTCOJAN.COMMESSA
+            FROM STAAMPDB.NOTCOJAN NOTCOJAN
+            WHERE NOTCOJAN.NUMERO_NC = ?
+        '''
+        commessa_rows = execute_query(query_commessa, (nr_niezg,))
+
+        related_ncs = []
+        total_qty = main_qty
+
+        if commessa_rows:
+            commessa = commessa_rows[0].get('COMMESSA')
+
+            if commessa:
+                # Get all NC numbers for this COMMESSA with DATA and UWAGA
+                # Only include records where TIPO_NOTA = 'NC'
+                query_all_ncs = '''
+                    SELECT NOTCOJAN.NUMERO_NC, NOTCOJAN.DATA,
+                    NOTCOJAN.NOTE_01, NOTCOJAN.NOTE_02, NOTCOJAN.NOTE_03, NOTCOJAN.NOTE_04, NOTCOJAN.NOTE_05,
+                    NOTCOJAN.NOTE_06, NOTCOJAN.NOTE_07, NOTCOJAN.NOTE_08, NOTCOJAN.NOTE_09, NOTCOJAN.NOTE_10
+                    FROM STAAMPDB.NOTCOJAN NOTCOJAN
+                    WHERE NOTCOJAN.COMMESSA = ?
+                    AND NOTCOJAN.NUMERO_NC IS NOT NULL
+                    AND NOTCOJAN.NUMERO_NC <> ''
+                    AND NOTCOJAN.TIPO_NOTA = 'NC'
+                '''
+                nc_rows = execute_query(query_all_ncs, (commessa,))
+
+                # Get blocked quantity for each NC
+                for row in nc_rows:
+                    nc_num = row.get('NUMERO_NC')
+                    if nc_num and nc_num.strip():
+                        nc_qty = get_blocked_parts_qty(nc_num)
+                        if nc_qty > 0:
+                            uwaga = combine_notes(row)
+                            related_ncs.append({
+                                'nr_niezg': nc_num,
+                                'blocked_qty': nc_qty,
+                                'data': mosys_to_date(row.get('DATA', '')),
+                                'uwaga': uwaga
+                            })
+
+                # Sort by quantity descending
+                related_ncs.sort(key=lambda x: x['blocked_qty'], reverse=True)
+
+                # Calculate total
+                total_qty = sum(nc['blocked_qty'] for nc in related_ncs)
+
+        return jsonify({
+            'success': True,
+            'nr_niezg': nr_niezg,
+            'blocked_qty': main_qty,
+            'related_ncs': related_ncs,
+            'total_qty': total_qty
+        })
+    except Exception as e:
+        print(f"Error fetching blocked parts: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'blocked_qty': 0,
+            'related_ncs': [],
+            'total_qty': 0
         }), 500

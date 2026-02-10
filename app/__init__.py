@@ -19,7 +19,9 @@ def create_app(config_name='default'):
 
     # Register blueprints
     from app.routes.linea import linea_bp
+    from app.routes.placeholder import placeholder_bp
     app.register_blueprint(linea_bp)
+    app.register_blueprint(placeholder_bp)
 
     # Add root redirect
     @app.route('/')

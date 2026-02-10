@@ -107,11 +107,15 @@ def get_stampi_riparaz(codice_riparazione):
             'CODICE_RIPARAZIONE': row.get('CODICE_RIPARAZIONE', '') or '',
             'DATA_INIZIO': mosys_to_date(row.get('DATA_INIZIO', '')),
             'ORA_INIZIO': mosys_godz(row.get('ORA_INIZIO', '')),
+            'DATA_INIZIO_RAW': row.get('DATA_INIZIO', '') or '',  # Raw for calculations
+            'ORA_INIZIO_RAW': row.get('ORA_INIZIO', '') or '',    # Raw for calculations
             'OPER_INIZIO': row.get('OPER_INIZIO', '') or '',
             'STATO_RIPARAZIONE': row.get('STATO_RIPARAZIONE', '') or '',
             'UWAGA': uwaga,
             'DATA_FINE': mosys_to_date(row.get('DATA_FINE', '')),
             'ORA_FINE': mosys_godz(row.get('ORA_FINE', '')),
+            'DATA_FINE_RAW': row.get('DATA_FINE', '') or '',      # Raw for calculations
+            'ORA_FINE_RAW': row.get('ORA_FINE', '') or '',        # Raw for calculations
             'OPER_FINE': row.get('OPER_FINE', '') or '',
             'DATA_COLLAUDO': mosys_to_date(row.get('DATA_COLLAUDO', '')),
             'ORA_COLLAUDO': mosys_godz(row.get('ORA_COLLAUDO', '')),

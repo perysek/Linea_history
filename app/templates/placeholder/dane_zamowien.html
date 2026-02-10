@@ -1,0 +1,14 @@
+{% extends 'placeholder/base_placeholder.html' %}
+
+{% set page_title = 'Dane zamówień produkcyjnych' %}
+
+{% block todo_items %}
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🔍 Pobranie danych o zamówieniach z MOSYS (COLLAUDO)</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📊 Lista wszystkich aktywnych zamówień</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🔎 Filtrowanie po: COMMESSA, kod detalu, forma, maszyna</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📈 Status zamówienia (w produkcji, zakończone, zatrzymane)</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📅 Planowana data zakończenia vs. rzeczywista</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🎯 Postęp realizacji (ilość zrobiona / planowana)</li>
+<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🔗 Powiązane NC i naprawy</li>
+<li style="padding: 0.5rem 0;">⚡ Eksport do Excel</li>
+{% endblock %}
