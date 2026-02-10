@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+
+{% block title %}LINEA - Uwagi Produkcyjne{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="refined-page fade-in">
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1 class="page-title">LINEA - Uwagi Produkcyjne</h1>
+    </header>
+
+    <!-- Preset Date Filter Pills -->
+    <div class="filter-pills">
+        <a href="?days=7" class="filter-pill {% if active_preset == 7 %}active{% endif %}">
+            7 dni
+        </a>
+        <a href="?days=30" class="filter-pill {% if active_preset == 30 %}active{% endif %}">
+            30 dni
+        </a>
+        <a href="?days=60" class="filter-pill {% if active_preset == 60 %}active{% endif %}">
+            60 dni
+        </a>
+        <a href="?days=90" class="filter-pill {% if active_preset == 90 %}active{% endif %}">
+            90 dni
+        </a>
+    </div>
+
+    <!-- Custom Date Range Form -->
+    <form method="GET" class="date-range-form">
+        <label for="date_from">Od:</label>
+        <input type="date"
+               id="date_from"
+               name="date_from"
+               value="{{ date_from or '' }}"
+               class="date-input">
+        <label for="date_to">Do:</label>
+        <input type="date"
+               id="date_to"
+               name="date_to"
+               value="{{ date_to or '' }}"
+               class="date-input">
+        <button type="submit" class="btn-refined btn-refined-primary">Zastosuj</button>
+    </form>
+
+    <!-- Table Container -->
+    <div class="table-container">
+        <div class="table-scroll-wrapper">
+            <!-- Fixed Header Table -->
+            <table class="refined-table" style="flex-shrink: 0;">
+                <colgroup>
+                    <col style="width: 10%;">  <!-- COMM -->
+                    <col style="width: 9%;">   <!-- DATA -->
+                    <col style="width: 7%;">   <!-- GODZ -->
+                    <col style="width: 10%;">  <!-- NR_NIEZG -->
+                    <col style="width: 10%;">  <!-- TYP_UWAGI -->
+                    <col style="width: 25%;">  <!-- UWAGA -->
+                    <col style="width: 10%;">  <!-- MASZYNA -->
+                    <col style="width: 10%;">  <!-- KOD_DETALU -->
+                    <col style="width: 9%;">   <!-- NR_FORMY -->
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortTable('COMM')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Commessa</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="COMM">
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('DATA')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Data</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('GODZ')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Godz</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('NR_NIEZG')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Nr NC</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="NR_NIEZG">
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('TYP_UWAGI')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Typ</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="TYP_UWAGI">
+                            </div>
+                        </th>
+                        <th>
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Uwaga</span>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="UWAGA">
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('MASZYNA')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Maszyna</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="MASZYNA">
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('KOD_DETALU')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Kod Detalu</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="KOD_DETALU">
+                            </div>
+                        </th>
+                        <th class="sortable" onclick="sortTable('NR_FORMY')">
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Nr Formy</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="NR_FORMY">
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+            </table>
+
+            <!-- Scrollable Body -->
+            <div class="tbody-scroll">
+                <table class="refined-table">
+                    <colgroup>
+                        <col style="width: 10%;">  <!-- COMM -->
+                        <col style="width: 9%;">   <!-- DATA -->
+                        <col style="width: 7%;">   <!-- GODZ -->
+                        <col style="width: 10%;">  <!-- NR_NIEZG -->
+                        <col style="width: 10%;">  <!-- TYP_UWAGI -->
+                        <col style="width: 25%;">  <!-- UWAGA -->
+                        <col style="width: 10%;">  <!-- MASZYNA -->
+                        <col style="width: 10%;">  <!-- KOD_DETALU -->
+                        <col style="width: 9%;">   <!-- NR_FORMY -->
+                    </colgroup>
+                    <tbody id="linea-tbody">
+                        <tr>
+                            <td colspan="9" style="text-align: center; padding: 2rem;">Ładowanie...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-bar">
+            <span class="pagination-info">
+                Wyświetlono <span class="pagination-count" id="visible-count">0</span>
+                z <span class="pagination-count" id="total-count">0</span> rekordów
+            </span>
+        </div>
+    </div>
+
+    <!-- Repair Details Modal -->
+    <div id="riparaz-modal" class="modal-overlay" onclick="closeModalOnBackdrop(event)">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">Dettagli Riparazione</h2>
+                    <p class="modal-subtitle">Codice: <span id="modal-codice"></span></p>
+                </div>
+                <button class="modal-close-btn" onclick="closeRiparazModal()">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <div class="modal-loading">Ładowanie...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/linea.js') }}"></script>
+{% endblock %}
