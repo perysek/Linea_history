@@ -7,25 +7,9 @@ class Config:
 
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
 
-    # Database connection to Pervasive via ODBC
-    SQLALCHEMY_DATABASE_URI = (
-        "mssql+pyodbc:///?odbc_connect="
-        "DSN=STAAMP_DB;"
-        "ArrayFetchOn=1;"
-        "ArrayBufferSize=8;"
-        "TransportHint=TCP;"
-        "DecimalSymbol=,;"
-    )
-
-    # Disable schema name detection for Pervasive SQL
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_pre_ping': True,
-        'pool_recycle': 3600,
-        'echo': False,
-        'connect_args': {
-            'autocommit': True
-        }
-    }
+    # Local SQLite database for sorting area data
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+        'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'linea.db')
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {

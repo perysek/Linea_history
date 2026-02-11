@@ -71,6 +71,13 @@ MOSYS_con.py
 # Data files
 *.xlsx
 *.xls
+*.db
+
+# Temporary helper scripts
+check_db.py
+seed_database.py
+verify_import.py
+Tasks_*.txt
 
 # Other utility scripts
 linkedin_data.py

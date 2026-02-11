@@ -1,5 +1,11 @@
 """Flask application factory."""
 from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+
+# Initialize extensions
+db = SQLAlchemy()
+migrate = Migrate()
 
 
 def create_app(config_name='default'):
@@ -16,6 +22,14 @@ def create_app(config_name='default'):
     else:
         from config import Config
         app.config.from_object(Config)
+
+    # Initialize extensions with app
+    db.init_app(app)
+    migrate.init_app(app, db)
+
+    # Import models after db initialization
+    with app.app_context():
+        from app.models import sorting_area  # noqa: F401
 
     # Register blueprints
     from app.routes.linea import linea_bp
