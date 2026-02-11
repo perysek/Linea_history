@@ -287,20 +287,25 @@ def get_all_blocked_parts() -> list:
 	Get all part numbers currently blocked (segregated) in MOSYS.
 
 	Steps:
-	1. Query SEGCONF joined with MAGCONF to get all NC numbers with blocked qty
+	1. Query SEGCONF joined with MAGCONF to get all NC numbers with blocked qty, box count, and date range
 	2. Batch-fetch data_niezgodnosci, nr_zamowienia, kod_detalu for all NC numbers
 	3. For each NC, get the first history entry text as "Opis niezgodnosci"
 
 	Returns: list of dicts with keys:
-		kod_detalu, nr_niezgodnosci, data_niezgodnosci, opis_niezgodnosci, ilosc_zablokowanych
+		kod_detalu, nr_niezgodnosci, data_niezgodnosci, opis_niezgodnosci,
+		ilosc_opakowan, ilosc_zablokowanych, data_produkcji_min, data_produkcji_max
 	"""
-	# Step 1: Get all NC numbers with their total blocked quantities
+	# Step 1: Get all NC numbers with their total blocked quantities, box count, and production date range
 	query = '''
-		SELECT SEGCONF.NUMERO_NON_CONF, SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL_QTY
+		SELECT SEGCONF.NUMERO_NON_CONF,
+		       COUNT(DISTINCT MAGCONF.NUMERO_CONFEZIONE) AS BOX_COUNT,
+		       SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL_QTY,
+		       MIN(MAGCONF.DATA_CARICO) AS MIN_DATE,
+		       MAX(MAGCONF.DATA_CARICO) AS MAX_DATE
 		FROM STAAMPDB.SEGCONF SEGCONF
 		INNER JOIN STAAMPDB.MAGCONF MAGCONF
 			ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
-		WHERE SEGCONF.NUMERO_CONFEZIONE > 2024000000001
+		WHERE SEGCONF.NUMERO_NON_CONF > 202300000
 			AND SEGCONF.NUMERO_NON_CONF <> '888888888'
 		GROUP BY SEGCONF.NUMERO_NON_CONF
 	'''
@@ -309,18 +314,27 @@ def get_all_blocked_parts() -> list:
 	if df.empty:
 		return []
 
-	# Build initial list with NC numbers and quantities
-	nc_qty_map = {}
+	# Build initial list with NC numbers, quantities, box counts, and date ranges
+	nc_data_map = {}
 	for _, row in df.iterrows():
 		nc = row['NUMERO_NON_CONF']
 		qty = int(row['TOTAL_QTY']) if row['TOTAL_QTY'] else 0
-		if qty > 0:
-			nc_qty_map[nc] = qty
+		box_count = int(row['BOX_COUNT']) if row['BOX_COUNT'] else 0
+		min_date = parse_mosys_date(row['MIN_DATE'])
+		max_date = parse_mosys_date(row['MAX_DATE'])
 
-	if not nc_qty_map:
+		if qty > 0:
+			nc_data_map[nc] = {
+				'qty': qty,
+				'box_count': box_count,
+				'min_date': min_date,
+				'max_date': max_date
+			}
+
+	if not nc_data_map:
 		return []
 
-	nc_list = list(nc_qty_map.keys())
+	nc_list = list(nc_data_map.keys())
 
 	# Step 2: Batch-fetch details (data_niezgodnosci, nr_zamowienia, kod_detalu)
 	details = get_batch_niezgodnosc_details(nc_list)
@@ -361,12 +375,74 @@ def get_all_blocked_parts() -> list:
 	results = []
 	for nc in nc_list:
 		detail = details.get(nc, {})
+		nc_data = nc_data_map[nc]
 		results.append({
 			'kod_detalu': detail.get('kod_detalu', ''),
 			'nr_niezgodnosci': nc,
 			'data_niezgodnosci': detail.get('data_niezgodnosci'),
 			'opis_niezgodnosci': first_notes.get(nc, ''),
-			'ilosc_zablokowanych': nc_qty_map[nc],
+			'ilosc_opakowan': nc_data['box_count'],
+			'ilosc_zablokowanych': nc_data['qty'],
+			'data_produkcji_min': nc_data['min_date'],
+			'data_produkcji_max': nc_data['max_date'],
 		})
 
 	return results
+
+
+def get_blocked_boxes_details(nr_niezgodnosci: str) -> list:
+	"""
+	Get detailed information about all boxes for a specific NC number.
+
+	Returns: list of dicts with keys:
+		numero_confezione, data_carico, oper_carico, qt_blocked,
+		box_x, box_y, box_z
+	"""
+	if not nr_niezgodnosci:
+		return []
+
+	query = '''
+		SELECT MAGCONF.NUMERO_CONFEZIONE,
+		       MAGCONF.DATA_CARICO,
+		       MAGCONF.OPER_CARICO,
+		       (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS QT_BLOCKED,
+		       MAGCONF.BOX_X,
+		       MAGCONF.BOX_Y,
+		       MAGCONF.BOX_Z
+		FROM STAAMPDB.SEGCONF SEGCONF
+		INNER JOIN STAAMPDB.MAGCONF MAGCONF
+			ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
+		WHERE SEGCONF.NUMERO_NON_CONF = ?
+		  AND (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) > 0
+		ORDER BY MAGCONF.DATA_CARICO DESC
+	'''
+
+	try:
+		df = get_pervasive(query, (nr_niezgodnosci,))
+		if df.empty:
+			return []
+
+		results = []
+		for _, row in df.iterrows():
+			# Format date from YYYYMMDD to YYYY/MM/DD
+			date_carico = parse_mosys_date(row['DATA_CARICO'])
+			date_str = date_carico.strftime('%Y/%m/%d') if date_carico else '-'
+
+			# Format location as X|Y|Z
+			box_x = str(row['BOX_X']).strip() if row['BOX_X'] else ''
+			box_y = str(row['BOX_Y']).strip() if row['BOX_Y'] else ''
+			box_z = str(row['BOX_Z']).strip() if row['BOX_Z'] else ''
+			location = f"{box_x}|{box_y}|{box_z}" if any([box_x, box_y, box_z]) else '-'
+
+			results.append({
+				'numero_confezione': row['NUMERO_CONFEZIONE'],
+				'data_carico': date_str,
+				'oper_carico': row['OPER_CARICO'] if row['OPER_CARICO'] else '-',
+				'qt_blocked': int(row['QT_BLOCKED']) if row['QT_BLOCKED'] else 0,
+				'location': location,
+			})
+
+		return results
+	except Exception as e:
+		print(f"Error fetching blocked boxes details for {nr_niezgodnosci}: {e}")
+		return []

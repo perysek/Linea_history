@@ -542,7 +542,7 @@
 }
 
 .modal-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.275rem 1rem;
     font-size: 0.8125rem;
     color: var(--color-ink);
     border-bottom: 1px solid var(--color-border-subtle);
@@ -559,7 +559,7 @@
 
 /* Loading State */
 .modal-loading {
-    padding: 3rem;
+padding: 3rem;
     text-align: center;
     color: var(--color-ink-muted);
 }
@@ -624,7 +624,7 @@
 .nc-list {
     margin-top: 0.75rem;
     background: #f8f9fa;
-    border-radius: 4px;
+    border-radius: 2px;
     max-height: 300px;
     overflow-y: auto;
     overflow-x: auto;
@@ -707,7 +707,7 @@
     justify-content: space-between;
     align-items: center;
     margin-top: 0.75rem;
-    padding-top: 0.75rem;
+    padding-top: 0.5rem;
     border-top: 2px solid var(--color-border);
     font-size: 0.9375rem;
     font-weight: 600;

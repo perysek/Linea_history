@@ -165,7 +165,7 @@
         <div class="sidebar-header">
             <a href="/" class="sidebar-logo">
                 <div class="sidebar-logo-icon">📊</div>
-                <span>LINEA System</span>
+                <div>MOSYS system</div>
             </a>
         </div>
 
@@ -229,15 +229,23 @@
                     <svg class="nav-link-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                    <span>Kontrola jakości</span>
+                    <span>Kontrola produkcja</span>
+                </a>
+	            
+	            <a href="{{ url_for('placeholder.kontrola_jakosci') }}" class="nav-link {% if request.endpoint == 'placeholder.kontrola_jakosci' %}active{% endif %}">
+                    <svg class="nav-link-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span>Kontrola laboratorium</span>
                 </a>
             </div>
         </nav>
 
         <!-- Footer -->
         <div class="sidebar-footer">
-            <div>© 2026 LINEA System</div>
-            <div style="margin-top: 0.25rem; opacity: 0.7;">v1.0.0</div>
+            <div>© 2026 Production Data Management</div>
+            <div style="margin-top: 0.25rem; opacity: 0.7;">Staamp Poland sp z o.o.</div>
+	        <div style="margin-top: 0.25rem; opacity: 0.7;">v1.0.0</div>
         </div>
     </aside>
 
