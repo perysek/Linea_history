@@ -8,6 +8,8 @@ let searchFilters = {};
 let allRecords = [];      // Store all fetched records for client-side sorting
 let filteredRecords = []; // Store filtered and sorted records
 let virtualScroll = null; // Virtual scroll manager instance
+let isLoading = false;    // Track if data is currently being fetched
+let pendingSort = null;   // Queue sort request if made during load
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -89,6 +91,16 @@ async function fetchRecords() {
 
     // Don't send search filters or sort params - all done client-side now
 
+    // Set loading state
+    isLoading = true;
+    console.log('fetchRecords: Loading started...');
+
+    // Disable sortable column headers
+    document.querySelectorAll('.sortable .th-header').forEach(header => {
+        header.style.opacity = '0.5';
+        header.style.cursor = 'wait';
+    });
+
     // Show loading state
     tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
 
@@ -105,6 +117,15 @@ async function fetchRecords() {
         if (data.success) {
             allRecords = data.records;  // Store all records
             filteredRecords = [...allRecords];  // Initialize filtered records
+            console.log(`fetchRecords: Loaded ${allRecords.length} records`);
+
+            // Apply any pending sort that was requested during load
+            if (pendingSort) {
+                console.log(`fetchRecords: Applying pending sort: ${pendingSort.field} ${pendingSort.direction}`);
+                currentSort = pendingSort;
+                pendingSort = null;
+            }
+
             applyFiltersAndSort();  // Apply filters and sort client-side
         } else {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych</td></tr>';
@@ -112,6 +133,16 @@ async function fetchRecords() {
     } catch (error) {
         console.error('Error fetching records:', error);
         tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd połączenia z serwerem</td></tr>';
+    } finally {
+        // Clear loading state
+        isLoading = false;
+        console.log('fetchRecords: Loading finished');
+
+        // Re-enable sortable column headers
+        document.querySelectorAll('.sortable .th-header').forEach(header => {
+            header.style.opacity = '1';
+            header.style.cursor = 'pointer';
+        });
     }
 }
 
@@ -381,18 +412,39 @@ function renderRecordsDirect(records) {
  * Sort table by column
  */
 function sortTable(field) {
-    console.log(`sortTable called: field=${field}, currentField=${currentSort.field}, currentDirection=${currentSort.direction}`);
+    console.log(`sortTable called: field=${field}, currentField=${currentSort.field}, currentDirection=${currentSort.direction}, isLoading=${isLoading}`);
 
+    // Calculate new sort state
+    let newField, newDirection;
     if (currentSort.field === field) {
         // Toggle direction if same field
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        newField = field;
+        newDirection = currentSort.direction === 'asc' ? 'desc' : 'asc';
     } else {
         // New field, default to ascending
-        currentSort.field = field;
-        currentSort.direction = 'asc';
+        newField = field;
+        newDirection = 'asc';
     }
 
-    console.log(`New sort state: field=${currentSort.field}, direction=${currentSort.direction}`);
+    // If data is currently loading, queue the sort request
+    if (isLoading) {
+        console.log(`sortTable: Data is loading, queueing sort request: ${newField} ${newDirection}`);
+        pendingSort = { field: newField, direction: newDirection };
+
+        // Update UI to show pending sort
+        document.querySelectorAll('.refined-table th').forEach(th => {
+            th.classList.remove('sorted');
+        });
+        event.target.closest('th').classList.add('sorted');
+
+        return; // Don't sort yet, wait for data to load
+    }
+
+    // Apply sort immediately if data is ready
+    currentSort.field = newField;
+    currentSort.direction = newDirection;
+
+    console.log(`sortTable: Applying sort immediately: field=${currentSort.field}, direction=${currentSort.direction}`);
 
     // Update sort icon visual state
     document.querySelectorAll('.refined-table th').forEach(th => {
