@@ -395,6 +395,10 @@ let currentSort = '{{ sort_by }}';
 let currentOrder = '{{ order }}';
 let currentPreset = '{{ preset }}';
 
+// Loading state and abort controller for cancelling requests
+let isLoading = false;
+let currentAbortController = null;
+
 // Format number with spaces as thousand separator
 function formatNumber(num) {
     return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -524,6 +528,16 @@ function updateSortIndicators(sortBy, order) {
 
 // Fetch data from API
 async function fetchData() {
+    // Cancel any existing request
+    if (currentAbortController) {
+        console.log('Aborting previous request');
+        currentAbortController.abort();
+    }
+
+    // Create new abort controller for this request
+    currentAbortController = new AbortController();
+    isLoading = true;
+
     const params = new URLSearchParams();
 
     // Add sorting
@@ -553,7 +567,9 @@ async function fetchData() {
 
     try {
         console.log('Fetching data from:', `/api/dane-selekcji?${params.toString()}`);
-        const response = await fetch(`/api/dane-selekcji?${params.toString()}`);
+        const response = await fetch(`/api/dane-selekcji?${params.toString()}`, {
+            signal: currentAbortController.signal
+        });
         console.log('Response status:', response.status);
         const data = await response.json();
         console.log('Received data:', data);
@@ -568,13 +584,26 @@ async function fetchData() {
             console.error('API returned success: false');
         }
     } catch (error) {
-        console.error('Error fetching data:', error);
+        if (error.name === 'AbortError') {
+            console.log('Request was cancelled - new request in progress');
+        } else {
+            console.error('Error fetching data:', error);
+        }
+    } finally {
+        isLoading = false;
+        currentAbortController = null;
     }
 }
 
 // Sort column (AJAX version)
 function sortColumn(column) {
     console.log('sortColumn called with:', column);
+
+    // If data is currently loading, the ongoing request will be cancelled
+    if (isLoading) {
+        console.log('Data is loading - cancelling current request and starting new sorted request');
+    }
+
     if (currentSort === column) {
         currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
     } else {
@@ -582,6 +611,8 @@ function sortColumn(column) {
         currentOrder = 'desc';
     }
     console.log('New sort state:', currentSort, currentOrder);
+
+    // fetchData will automatically cancel any in-progress request
     fetchData();
 }
 
