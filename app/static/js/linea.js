@@ -5,24 +5,27 @@
 
 let currentSort = { field: 'DATA', direction: 'desc' };  // Default: newest to oldest
 let searchFilters = {};
-let allRecords = [];      // Store all fetched records for client-side sorting
-let filteredRecords = []; // Store filtered and sorted records
-let virtualScroll = null; // Virtual scroll manager instance
+let allRecords = [];      // Accumulated records from pagination
 let isLoading = false;    // Track if data is currently being fetched
-let pendingSort = null;   // Queue sort request if made during load
+let currentAbortController = null;  // For cancelling requests
+
+// Pagination state
+let currentOffset = 0;
+let totalRecords = 0;
+const RECORDS_PER_PAGE = 100;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load
     fetchRecords();
 
-    // Setup column search inputs with instant client-side filtering
+    // Setup column search inputs with server-side filtering
     document.querySelectorAll('.column-search').forEach(input => {
         input.addEventListener('input', debounce(() => {
             searchFilters[input.dataset.column] = input.value.trim();
-            applyFiltersAndSort();  // Client-side filtering
+            applyFilters();  // Server-side filtering
             updateClearFiltersButton();  // Update button visibility
-        }, 300));  // Reduced debounce for faster response
+        }, 300));
     });
 
     // Intercept filter pill clicks to prevent page reload
@@ -71,9 +74,25 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Fetch records via AJAX (only called when filters/date range change)
+ * Fetch records via AJAX with pagination
  */
-async function fetchRecords() {
+async function fetchRecords(resetOffset = true) {
+    // Cancel any existing request
+    if (currentAbortController) {
+        console.log('Aborting previous request');
+        currentAbortController.abort();
+    }
+
+    // Reset offset when sorting/filtering changes
+    if (resetOffset) {
+        currentOffset = 0;
+        allRecords = [];
+    }
+
+    // Create new abort controller
+    currentAbortController = new AbortController();
+    isLoading = true;
+
     const tbody = document.getElementById('linea-tbody');
     const params = new URLSearchParams();
 
@@ -89,215 +108,72 @@ async function fetchRecords() {
         params.append('date_to', urlParams.get('date_to'));
     }
 
-    // Don't send search filters or sort params - all done client-side now
+    // Add sort parameters
+    params.append('sort', currentSort.field);
+    params.append('dir', currentSort.direction);
 
-    // Set loading state
-    isLoading = true;
-    console.log('fetchRecords: Loading started...');
-
-    // Disable sortable column headers
-    document.querySelectorAll('.sortable .th-header').forEach(header => {
-        header.style.opacity = '0.5';
-        header.style.cursor = 'wait';
+    // Add search filters
+    Object.entries(searchFilters).forEach(([key, value]) => {
+        if (value) {
+            params.append(`search_${key}`, value);
+        }
     });
 
-    // Show loading state
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
+    // Add pagination
+    params.append('limit', RECORDS_PER_PAGE);
+    params.append('offset', currentOffset);
 
-    // Destroy existing virtual scroll if it exists
-    if (virtualScroll) {
-        virtualScroll.destroy();
-        virtualScroll = null;
+    // Show loading state on first load
+    if (currentOffset === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
     }
 
     try {
-        const response = await fetch(`/linea/api/search?${params}`);
+        const response = await fetch(`/linea/api/search?${params}`, {
+            signal: currentAbortController.signal
+        });
         const data = await response.json();
 
         if (data.success) {
-            allRecords = data.records;  // Store all records
-            filteredRecords = [...allRecords];  // Initialize filtered records
-            console.log(`fetchRecords: Loaded ${allRecords.length} records`);
+            totalRecords = data.pagination.total;
+            currentOffset = data.pagination.offset;
 
-            // Apply any pending sort that was requested during load
-            if (pendingSort) {
-                console.log(`fetchRecords: Applying pending sort: ${pendingSort.field} ${pendingSort.direction}`);
-                currentSort = pendingSort;
-                pendingSort = null;
+            // Append or replace records
+            if (resetOffset) {
+                allRecords = data.records;
+            } else {
+                allRecords = allRecords.concat(data.records);
             }
 
-            applyFiltersAndSort();  // Apply filters and sort client-side
+            renderRecordsDirect(allRecords);
+            updateCount(allRecords.length, totalRecords);
+            updateLoadMoreButton(data.pagination);
+            console.log(`Loaded ${data.pagination.loaded} records (${currentOffset}-${currentOffset + data.pagination.loaded} of ${totalRecords})`);
         } else {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych</td></tr>';
         }
     } catch (error) {
-        console.error('Error fetching records:', error);
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd połączenia z serwerem</td></tr>';
-    } finally {
-        // Clear loading state
-        isLoading = false;
-        console.log('fetchRecords: Loading finished');
-
-        // Re-enable sortable column headers
-        document.querySelectorAll('.sortable .th-header').forEach(header => {
-            header.style.opacity = '1';
-            header.style.cursor = 'pointer';
-        });
-    }
-}
-
-/**
- * Apply filters and sort client-side with virtual scrolling
- */
-function applyFiltersAndSort() {
-    console.log(`applyFiltersAndSort: sorting by ${currentSort.field} ${currentSort.direction}`);
-
-    // Start with all records
-    let filtered = allRecords;
-
-    // Apply search filters
-    Object.entries(searchFilters).forEach(([column, searchValue]) => {
-        if (searchValue) {
-            const lowerSearch = searchValue.toLowerCase();
-            filtered = filtered.filter(record => {
-                const fieldValue = (record[column] || '').toString().toLowerCase();
-                return fieldValue.includes(lowerSearch);
-            });
-        }
-    });
-
-    console.log(`Filtered: ${filtered.length} records, sorting by ${currentSort.field}`);
-
-    // Sort the filtered results
-    filteredRecords = [...filtered].sort((a, b) => {
-        let aVal, bVal;
-
-        // Special handling for DATA column - combine DATA_RAW + ORA_RAW for timestamp sorting
-        if (currentSort.field === 'DATA') {
-            aVal = createTimestamp(a.DATA_RAW, a.ORA_RAW);
-            bVal = createTimestamp(b.DATA_RAW, b.ORA_RAW);
+        if (error.name === 'AbortError') {
+            console.log('Request was cancelled - new request in progress');
         } else {
-            aVal = a[currentSort.field] || '';
-            bVal = b[currentSort.field] || '';
+            console.error('Error fetching records:', error);
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd połączenia z serwerem</td></tr>';
         }
-
-        let comparison = 0;
-        if (aVal < bVal) comparison = -1;
-        if (aVal > bVal) comparison = 1;
-
-        return currentSort.direction === 'asc' ? comparison : -comparison;
-    });
-
-    // Log first few sorted values for debugging
-    if (filteredRecords.length > 0) {
-        const first3 = filteredRecords.slice(0, 3).map(r => r[currentSort.field] || r.DATA_RAW);
-        console.log(`First 3 sorted values:`, first3);
+    } finally {
+        isLoading = false;
+        currentAbortController = null;
     }
-
-    // Render records (will handle virtual scroll vs direct render)
-    renderRecords(filteredRecords);
-
-    updateCount(filteredRecords.length);
 }
 
 /**
- * Create timestamp from DATE and TIME for proper sorting
- * Combines NOTCOJAN.DATA & NOTCOJAN.ORA into 14-digit integer: YYYYMMDDHHMMSS
- * @param {string} dataRaw - Raw date from NOTCOJAN.DATA in format "YYYYMMDD" (e.g., "20240210")
- * @param {string} oraRaw - Raw time from NOTCOJAN.ORA in format "HHMMSS" (e.g., "143025")
- * @returns {number} - 14-digit integer timestamp for numerical sorting
+ * Apply filters - refetch from server with new filters
  */
-function createTimestamp(dataRaw, oraRaw) {
-    // Handle empty or null values
-    if (!dataRaw) return 0;
-
-    // Convert to strings and remove any non-digit characters
-    const dataStr = (dataRaw || '').toString().replace(/\D/g, '');
-    const oraStr = (oraRaw || '').toString().replace(/\D/g, '');
-
-    // Ensure exactly 8 digits for date, 6 for time
-    const dateDigits = dataStr.padStart(8, '0').substring(0, 8);
-    const timeDigits = oraStr.padStart(6, '0').substring(0, 6);
-
-    // Concatenate: YYYYMMDD + HHMMSS = YYYYMMDDHHMMSS (14 digits)
-    const timestampString = dateDigits + timeDigits;
-
-    // Convert to integer for numerical sorting
-    const timestampInt = parseInt(timestampString, 10);
-
-    // Return 0 for invalid timestamps
-    return isNaN(timestampInt) ? 0 : timestampInt;
+function applyFilters() {
+    fetchRecords(true);  // Reset to first page
 }
 
 /**
- * Initialize virtual scrolling
- */
-function initVirtualScroll() {
-    const container = document.querySelector('.tbody-scroll');
-    const tbody = document.getElementById('linea-tbody');
-
-    if (!container || !tbody || filteredRecords.length === 0) return;
-
-    virtualScroll = new VirtualScrollManager({
-        container: container,
-        tbody: tbody,
-        data: filteredRecords,
-        rowHeight: 45,
-        bufferSize: 5,
-        renderRow: renderSingleRow
-    });
-}
-
-/**
- * Render a single table row for virtual scrolling
- */
-function renderSingleRow(record, index) {
-    const row = document.createElement('tr');
-    const hasRiparazione = record.CODICE_RIPARAZIONE && record.CODICE_RIPARAZIONE.trim();
-    const hasNC = record.NR_NIEZG && record.NR_NIEZG.trim();
-
-    // Row is clickable if it has either riparazione code or NC number
-    const isClickable = hasRiparazione || hasNC;
-    row.className = isClickable ? 'clickable-row' : '';
-
-    // Store both codice_riparazione and nr_niezg as data attributes
-    if (hasRiparazione) {
-        row.setAttribute('data-codice-riparazione', record.CODICE_RIPARAZIONE);
-    }
-    if (hasNC) {
-        row.setAttribute('data-nr-niezg', record.NR_NIEZG);
-    }
-
-    // Map TYP_UWAGI to Polish labels
-    const typLabel = mapTypUwagi(record.TYP_UWAGI || '—');
-
-    // Add yellow circle indicator for closed NC without AC records
-    const nrNiezgDisplay = record.MISSING_AC
-        ? `${escapeHtml(record.NR_NIEZG || '—')}<span style="color: #ffc107; margin-left: 0.25rem;">●</span>`
-        : escapeHtml(record.NR_NIEZG || '—');
-
-    row.innerHTML = `
-        <td>${escapeHtml(record.COMM || '—')}</td>
-        <td>${escapeHtml(record.DATA || '—')}</td>
-        <td>${escapeHtml(record.GODZ || '—')}</td>
-        <td>${nrNiezgDisplay}</td>
-        <td>${typLabel}</td>
-        <td>${escapeHtml(record.UWAGA || '—')}</td>
-        <td>${escapeHtml(record.MASZYNA || '—')}</td>
-        <td>${escapeHtml(record.KOD_DETALU || '—')}</td>
-        <td>${escapeHtml(record.NR_FORMY || '—')}</td>
-    `;
-
-    // Add click handler if clickable
-    if (isClickable) {
-        row.addEventListener('click', () => handleRowClick(row));
-    }
-
-    return row;
-}
-
-/**
- * Handle row click event for virtual scrolled rows
+ * Handle row click event
  */
 function handleRowClick(row) {
     const codiceRiparazione = row.getAttribute('data-codice-riparazione');
@@ -309,54 +185,7 @@ function handleRowClick(row) {
 }
 
 /**
- * Render records in table with smart mode selection
- */
-function renderRecords(records) {
-    console.log(`renderRecords: ${records.length} records, virtual scroll ${virtualScroll ? 'EXISTS' : 'NULL'}`);
-
-    const tbody = document.getElementById('linea-tbody');
-    const useVirtualScroll = records.length > 50;  // Lower threshold for better performance
-
-    console.log(`useVirtualScroll: ${useVirtualScroll} (threshold: 50)`);
-
-    if (records.length === 0) {
-        // Destroy virtual scroll if exists
-        if (virtualScroll) {
-            virtualScroll.destroy();
-            virtualScroll = null;
-        }
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Brak rekordów spełniających kryteria</td></tr>';
-        return;
-    }
-
-    if (useVirtualScroll) {
-        // Use virtual scrolling for better performance
-        if (virtualScroll) {
-            // Update existing virtual scroll
-            console.log('Updating existing virtual scroll with sorted data');
-            virtualScroll.updateData(records);
-        } else {
-            // Initialize new virtual scroll
-            console.log('Initializing new virtual scroll');
-            tbody.innerHTML = '';  // Clear tbody
-            initVirtualScroll();
-        }
-    } else {
-        // Destroy virtual scroll if switching from virtual to direct
-        if (virtualScroll) {
-            console.log('Destroying virtual scroll, switching to direct render');
-            virtualScroll.destroy();
-            virtualScroll = null;
-        }
-
-        // For small datasets, render directly (original behavior)
-        console.log('Using direct render for small dataset');
-        renderRecordsDirect(records);
-    }
-}
-
-/**
- * Direct rendering for small datasets (original implementation)
+ * Render records directly
  */
 function renderRecordsDirect(records) {
     const tbody = document.getElementById('linea-tbody');
@@ -412,56 +241,60 @@ function renderRecordsDirect(records) {
  * Sort table by column
  */
 function sortTable(field) {
-    console.log(`sortTable called: field=${field}, currentField=${currentSort.field}, currentDirection=${currentSort.direction}, isLoading=${isLoading}`);
+    console.log(`sortTable called: field=${field}`);
+
+    // If data is currently loading, cancel and restart
+    if (isLoading) {
+        console.log('Data is loading - cancelling current request and starting new sorted request');
+    }
 
     // Calculate new sort state
-    let newField, newDirection;
     if (currentSort.field === field) {
-        // Toggle direction if same field
-        newField = field;
-        newDirection = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
     } else {
-        // New field, default to ascending
-        newField = field;
-        newDirection = 'asc';
+        currentSort.field = field;
+        currentSort.direction = 'asc';
     }
 
-    // If data is currently loading, queue the sort request
-    if (isLoading) {
-        console.log(`sortTable: Data is loading, queueing sort request: ${newField} ${newDirection}`);
-        pendingSort = { field: newField, direction: newDirection };
+    console.log(`New sort state: ${currentSort.field} ${currentSort.direction}`);
 
-        // Update UI to show pending sort
-        document.querySelectorAll('.refined-table th').forEach(th => {
-            th.classList.remove('sorted');
-        });
-        event.target.closest('th').classList.add('sorted');
-
-        return; // Don't sort yet, wait for data to load
-    }
-
-    // Apply sort immediately if data is ready
-    currentSort.field = newField;
-    currentSort.direction = newDirection;
-
-    console.log(`sortTable: Applying sort immediately: field=${currentSort.field}, direction=${currentSort.direction}`);
-
-    // Update sort icon visual state
-    document.querySelectorAll('.refined-table th').forEach(th => {
-        th.classList.remove('sorted');
-    });
-    event.target.closest('th').classList.add('sorted');
-
-    // Re-apply filters and sort
-    applyFiltersAndSort();
+    // Fetch data with new sort (will cancel any in-progress request)
+    fetchRecords(true);
 }
 
 /**
  * Update record count display
  */
-function updateCount(total) {
-    document.getElementById('visible-count').textContent = total;
+function updateCount(visible, total) {
+    document.getElementById('visible-count').textContent = visible;
     document.getElementById('total-count').textContent = total;
+}
+
+/**
+ * Update Load More button visibility
+ */
+function updateLoadMoreButton(pagination) {
+    const loadMoreBtn = document.getElementById('btn-load-more');
+    if (loadMoreBtn) {
+        if (pagination.has_more) {
+            loadMoreBtn.style.display = 'inline-block';
+        } else {
+            loadMoreBtn.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * Load more records
+ */
+function loadMore() {
+    if (isLoading) {
+        console.log('Already loading data...');
+        return;
+    }
+
+    currentOffset += RECORDS_PER_PAGE;
+    fetchRecords(false);  // Don't reset offset
 }
 
 /**
@@ -513,8 +346,8 @@ function clearAllFilters() {
     // Reset search filters object
     searchFilters = {};
 
-    // Re-apply filters and sort (this will show all records)
-    applyFiltersAndSort();
+    // Re-fetch data without filters
+    applyFilters();
 
     // Hide the clear button
     updateClearFiltersButton();

@@ -194,11 +194,26 @@
         </div>
 
         <!-- Pagination Bar -->
-        <div class="pagination-bar">
+        <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center;">
             <span class="pagination-info">
                 Wyświetlono <span class="pagination-count" id="visible-count">0</span>
                 z <span class="pagination-count" id="total-count">0</span> rekordów
             </span>
+            <button type="button"
+                    id="btn-load-more"
+                    onclick="loadMore()"
+                    style="padding: 0.5rem 1rem;
+                           background: var(--color-accent);
+                           color: white;
+                           border: none;
+                           border-radius: 6px;
+                           font-size: 0.875rem;
+                           font-weight: 500;
+                           cursor: pointer;
+                           display: none;
+                           transition: background 0.2s;">
+                Załaduj więcej
+            </button>
         </div>
     </div>
 
@@ -225,6 +240,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/virtual_scroll.js') }}"></script>
 <script src="{{ url_for('static', filename='js/linea.js') }}"></script>
 {% endblock %}
