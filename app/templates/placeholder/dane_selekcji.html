@@ -4,6 +4,53 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
+<style>
+/* Fix search input alignment with table cells */
+.refined-table th {
+    padding: 0.5rem 0.75rem;
+}
+
+.refined-table .th-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.refined-table .column-search {
+    width: 100%;
+    padding: 0.25rem 0.5rem;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+.refined-table tbody td {
+    padding: 0.5rem 0.75rem;
+}
+
+/* Fix scrollbar alignment issue */
+.table-scroll-wrapper {
+    display: flex;
+    flex-direction: column;
+    overflow-x: auto;
+    position: relative;
+}
+
+.tbody-scroll {
+    overflow-y: scroll;
+    overflow-x: hidden;
+}
+
+/* Ensure both tables have same width */
+.table-scroll-wrapper > table {
+    width: calc(100% - 6px); /* Account for scrollbar width */
+    table-layout: fixed;
+}
+
+.tbody-scroll > table {
+    width: 100%;
+    table-layout: fixed;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -16,32 +63,32 @@
     <!-- Stats Cards -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.6875rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Raportów</div>
+            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Raportów</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ stats.count }}</div>
         </div>
 
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.6875rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Detali</div>
+            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Detali</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "{:,.0f}".format(stats.parts_checked).replace(',', ' ') }}</div>
         </div>
 
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.6875rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Braków</div>
+            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Braków</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "{:,.0f}".format(stats.total_defects).replace(',', ' ') }}</div>
         </div>
 
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.6875rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Brakowość</div>
+            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Brakowość</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.2f"|format(stats.average_scrap_rate) }}%</div>
         </div>
 
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.6875rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Wydajność</div>
+            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Wydajność</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.0f"|format(stats.average_productivity) }}</div>
         </div>
 
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.6875rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Godz. pracy</div>
+            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Godz. pracy</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.1f"|format(stats.hours_worked) }}</div>
         </div>
     </div>
@@ -69,23 +116,24 @@
     <!-- Table Container -->
     <div class="table-container">
         <div class="table-scroll-wrapper">
-            <table class="refined-table">
+            <!-- Fixed Header Table -->
+            <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
-                    <col style="width: 8%;">   <!-- DATA -->
-                    <col style="width: 8%;">   <!-- DZIAŁ -->
-                    <col style="width: 8%;">   <!-- RAPORT -->
-                    <col style="width: 9%;">   <!-- NR NC -->
-                    <col style="width: 8%;">   <!-- DATA NC -->
-                    <col style="width: 8%;">   <!-- ZAM -->
-                    <col style="width: 10%;">  <!-- KOD DETALU -->
-                    <col style="width: 8%;">   <!-- INSTRUKCJA -->
-                    <col style="width: 6%;">   <!-- ONLINE -->
-                    <col style="width: 8%;">   <!-- ILOŚĆ -->
-                    <col style="width: 5%;">   <!-- NOK -->
-                    <col style="width: 10%;">  <!-- WADY -->
-                    <col style="width: 6%;">   <!-- BRAKI % -->
-                    <col style="width: 6%;">   <!-- CZAS -->
-                    <col style="width: 6%;">   <!-- szt/godz -->
+                    <col style="width: 7.3%;">  <!-- DATA -->
+                    <col style="width: 7.3%;">  <!-- DZIAŁ -->
+                    <col style="width: 5.5%;">  <!-- RAPORT -->
+                    <col style="width: 8.2%;">  <!-- NR NC -->
+                    <col style="width: 7.3%;">  <!-- DATA NC -->
+                    <col style="width: 4.6%;">  <!-- ZAM -->
+                    <col style="width: 10.6%;">  <!-- KOD DETALU -->
+                    <col style="width: 9.1%;">  <!-- INSTRUKCJA -->
+                    <col style="width: 5.5%;">  <!-- ONLINE -->
+                    <col style="width: 4.6%;">  <!-- ILOŚĆ -->
+                    <col style="width: 2.7%;">  <!-- NOK -->
+                    <col style="width: 12.6%;">  <!-- WADY -->
+                    <col style="width: 6.4%;">  <!-- BRAKI % -->
+                    <col style="width: 3.7%;">  <!-- CZAS -->
+                    <col style="width: 4.6%;">  <!-- szt/godz -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -95,16 +143,25 @@
                                     DATA
                                     <span class="sort-icon">{{ '▼' if sort_by == 'data_selekcji' and order == 'desc' else '▲' if sort_by == 'data_selekcji' else '' }}</span>
                                 </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_data_selekcji" value="{{ filters.data_selekcji }}">
                             </div>
                         </th>
-                        <th>DZIAŁ</th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('operator')" style="cursor: pointer;">
+                                    DZIAŁ
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'operator' and order == 'desc' else '▲' if sort_by == 'operator' else '' }}</span>
+                                </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_operator" value="{{ filters.operator }}">
+                            </div>
+                        </th>
                         <th class="sortable">
                             <div class="th-content">
                                 <div class="th-header" onclick="sortColumn('nr_raportu')" style="cursor: pointer;">
                                     RAPORT
                                     <span class="sort-icon">{{ '▼' if sort_by == 'nr_raportu' and order == 'desc' else '▲' if sort_by == 'nr_raportu' else '' }}</span>
                                 </div>
-                                <input type="text" class="search-input" placeholder="szukaj...">
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_nr_raportu" value="{{ filters.nr_raportu }}">
                             </div>
                         </th>
                         <th class="sortable">
@@ -113,7 +170,7 @@
                                     NR NC
                                     <span class="sort-icon">{{ '▼' if sort_by == 'nr_niezgodnosci' and order == 'desc' else '▲' if sort_by == 'nr_niezgodnosci' else '' }}</span>
                                 </div>
-                                <input type="text" class="search-input" placeholder="szukaj...">
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_nr_niezgodnosci" value="{{ filters.nr_niezgodnosci }}">
                             </div>
                         </th>
                         <th class="sortable">
@@ -122,55 +179,130 @@
                                     DATA NC
                                     <span class="sort-icon">{{ '▼' if sort_by == 'data_niezgodnosci' and order == 'desc' else '▲' if sort_by == 'data_niezgodnosci' else '' }}</span>
                                 </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_data_nc" value="{{ filters.data_nc }}">
                             </div>
                         </th>
-                        <th>ZAM</th>
-                        <th>KOD DETALU</th>
-                        <th>INSTR</th>
-                        <th style="text-align: center;">ONLINE</th>
-                        <th style="text-align: right;">ILOŚĆ</th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('nr_zamowienia')" style="cursor: pointer;">
+                                    ZAM
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'nr_zamowienia' and order == 'desc' else '▲' if sort_by == 'nr_zamowienia' else '' }}</span>
+                                </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_commessa" value="{{ filters.commessa }}">
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('kod_detalu')" style="cursor: pointer;">
+                                    KOD DETALU
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'kod_detalu' and order == 'desc' else '▲' if sort_by == 'kod_detalu' else '' }}</span>
+                                </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_kod_detalu" value="{{ filters.kod_detalu }}">
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('nr_instrukcji')" style="cursor: pointer;">
+                                    INSTR
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'nr_instrukcji' and order == 'desc' else '▲' if sort_by == 'nr_instrukcji' else '' }}</span>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" style="text-align: center;">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('selekcja_na_biezaco')" style="cursor: pointer;">
+                                    ONLINE
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'selekcja_na_biezaco' and order == 'desc' else '▲' if sort_by == 'selekcja_na_biezaco' else '' }}</span>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" style="text-align: right;">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('ilosc_detali_sprawdzonych')" style="cursor: pointer;">
+                                    ILOŚĆ
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'ilosc_detali_sprawdzonych' and order == 'desc' else '▲' if sort_by == 'ilosc_detali_sprawdzonych' else '' }}</span>
+                                </div>
+                            </div>
+                        </th>
                         <th style="text-align: right;">NOK</th>
-                        <th>WADY</th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('defekt')" style="cursor: pointer;">
+                                    WADY
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'defekt' and order == 'desc' else '▲' if sort_by == 'defekt' else '' }}</span>
+                                </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_defekt" value="{{ filters.defekt }}">
+                            </div>
+                        </th>
                         <th style="text-align: right;">BRAKI %</th>
-                        <th style="text-align: right;">CZAS</th>
+                        <th class="sortable" style="text-align: right;">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('czas_pracy')" style="cursor: pointer;">
+                                    CZAS
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'czas_pracy' and order == 'desc' else '▲' if sort_by == 'czas_pracy' else '' }}</span>
+                                </div>
+                            </div>
+                        </th>
                         <th style="text-align: right;">szt/h</th>
                     </tr>
                 </thead>
-                <tbody>
+            </table>
+
+            <!-- Scrollable Body -->
+            <div class="tbody-scroll">
+                <table class="refined-table">
+                    <colgroup>
+                        <col style="width: 7.3%;">  <!-- DATA -->
+                        <col style="width: 7.3%;">  <!-- DZIAŁ -->
+                        <col style="width: 5.5%;">  <!-- RAPORT -->
+                        <col style="width: 8.2%;">  <!-- NR NC -->
+                        <col style="width: 7.3%;">  <!-- DATA NC -->
+                        <col style="width: 4.6%;">  <!-- ZAM -->
+                        <col style="width: 10.6%;">  <!-- KOD DETALU -->
+                        <col style="width: 9.1%;">  <!-- INSTRUKCJA -->
+                        <col style="width: 5.5%;">  <!-- ONLINE -->
+                        <col style="width: 4.6%;">  <!-- ILOŚĆ -->
+                        <col style="width: 2.7%;">  <!-- NOK -->
+                        <col style="width: 12.6%;">  <!-- WADY -->
+                        <col style="width: 6.4%;">  <!-- BRAKI % -->
+                        <col style="width: 3.7%;">  <!-- CZAS -->
+                        <col style="width: 4.6%;">  <!-- szt/godz -->
+                    </colgroup>
+                    <tbody id="dane-tbody">
                     {% if reports %}
                         {% for report in reports %}
                         <tr>
-                            <td style="font-size: 0.6875rem;">{{ report.data_selekcji.strftime('%d.%m.%y') if report.data_selekcji else '-' }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.operator.dzial.opis_kategorii if report.operator and report.operator.dzial else '-' }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.nr_raportu }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.nr_niezgodnosci }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.data_niezgodnosci.strftime('%d.%m.%y') if report.data_niezgodnosci else '-' }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.nr_zamowienia or '-' }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.kod_detalu or '-' }}</td>
-                            <td style="font-size: 0.6875rem;">{{ report.nr_instrukcji or '-' }}</td>
-                            <td style="text-align: center; font-size: 0.6875rem;">
+                            <td style="font-size: 0.8125rem;">{{ report.data_selekcji.strftime('%d.%m.%y') if report.data_selekcji else '-' }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.operator.dzial.opis_kategorii if report.operator and report.operator.dzial else '-' }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.nr_raportu }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.nr_niezgodnosci }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.data_niezgodnosci.strftime('%d.%m.%y') if report.data_niezgodnosci else '-' }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.nr_zamowienia or '-' }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.kod_detalu or '-' }}</td>
+                            <td style="font-size: 0.8125rem;">{{ report.nr_instrukcji or '-' }}</td>
+                            <td style="text-align: center; font-size: 0.8125rem;">
                                 {% if report.selekcja_na_biezaco %}
-                                <span style="display: inline-block; padding: 0.125rem 0.5rem; background: #dcfce7; color: #166534; border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Tak</span>
+                                <span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color: #166534; border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Tak</span>
                                 {% else %}
-                                <span style="display: inline-block; padding: 0.125rem 0.5rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Nie</span>
+                                <span style="display: inline-block; padding: 0.125rem 0.25rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Nie</span>
                                 {% endif %}
                             </td>
-                            <td style="text-align: right; font-weight: 500; font-size: 0.6875rem;">{{ "{:,.0f}".format(report.ilosc_detali_sprawdzonych).replace(',', ' ') }}</td>
-                            <td style="text-align: right; font-size: 0.6875rem;">
+                            <td style="text-align: right; font-weight: 500; font-size: 0.8125rem;">{{ "{:,.0f}".format(report.ilosc_detali_sprawdzonych).replace(',', ' ') }}</td>
+                            <td style="text-align: right; font-size: 0.8125rem;">
                                 {% if report.total_defects > 0 %}
                                 <span style="color: #f59e0b; font-weight: 500;">{{ report.total_defects }}</span>
                                 {% else %}
                                 <span style="color: var(--color-ink-subtle);">0</span>
                                 {% endif %}
                             </td>
-                            <td style="font-size: 0.625rem;">
+                            <td style="font-size: 0.625rem; text-align: left;">
                                 {% if report.braki_defekty %}
                                 {{ report.braki_defekty|map(attribute='defekt')|join(', ') }}
                                 {% else %}
                                 -
                                 {% endif %}
                             </td>
-                            <td style="text-align: right; font-size: 0.6875rem;">
+                            <td style="text-align: right; font-size: 0.8125rem;">
                                 {% if report.ilosc_detali_sprawdzonych > 0 %}
                                     {% set scrap_percentage = (report.total_defects / report.ilosc_detali_sprawdzonych) * 100 %}
                                     {% if scrap_percentage >= 5 %}
@@ -186,8 +318,8 @@
                                 <span style="color: var(--color-ink-subtle);">-</span>
                                 {% endif %}
                             </td>
-                            <td style="text-align: right; font-size: 0.6875rem;">{{ "%.1f"|format(report.czas_pracy) }}</td>
-                            <td style="text-align: right; font-size: 0.6875rem;">{{ "%.0f"|format(report.rzeczywista_wydajnosc) }}</td>
+                            <td style="text-align: right; font-size: 0.8125rem;">{{ "%.1f"|format(report.czas_pracy) }}</td>
+                            <td style="text-align: right; font-size: 0.8125rem;">{{ "%.0f"|format(report.rzeczywista_wydajnosc) }}</td>
                         </tr>
                         {% endfor %}
                     {% else %}
@@ -198,26 +330,255 @@
                         </td>
                     </tr>
                     {% endif %}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-bar">
+            <span class="pagination-info">
+                Wyświetlono <span class="pagination-count" id="visible-count">{{ reports|length }}</span>
+                z <span class="pagination-count" id="total-count">{{ reports|length }}</span> rekordów
+            </span>
         </div>
     </div>
 </div>
 
 <script>
-function sortColumn(column) {
-    const params = new URLSearchParams(window.location.search);
-    const currentSort = params.get('sort');
-    const currentOrder = params.get('order') || 'asc';
+// Global state for current sorting and preset
+let currentSort = '{{ sort_by }}';
+let currentOrder = '{{ order }}';
+let currentPreset = '{{ preset }}';
 
-    if (currentSort === column) {
-        params.set('order', currentOrder === 'asc' ? 'desc' : 'asc');
+// Format number with spaces as thousand separator
+function formatNumber(num) {
+    return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+// Update stats cards with new data
+function updateStats(stats) {
+    console.log('Updating stats:', stats);
+    const statCards = document.querySelectorAll('[style*="font-size: 1.5rem"]');
+    if (statCards.length >= 6) {
+        statCards[0].textContent = stats.count;
+        statCards[1].textContent = formatNumber(stats.parts_checked);
+        statCards[2].textContent = formatNumber(stats.total_defects);
+        statCards[3].textContent = stats.average_scrap_rate.toFixed(2) + '%';
+        statCards[4].textContent = Math.round(stats.average_productivity);
+        statCards[5].textContent = stats.hours_worked.toFixed(1);
     } else {
-        params.set('sort', column);
-        params.set('order', 'desc');
+        console.error('Could not find all stat cards');
+    }
+}
+
+// Update table rows with new data
+function updateTable(reports, sortBy, order) {
+    const tbody = document.getElementById('dane-tbody');
+
+    if (reports.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="15" style="text-align: center; padding: 3rem; color: var(--color-ink-subtle);">
+                    <div style="font-size: 1rem; margin-bottom: 0.5rem;">Brak danych</div>
+                    <div style="font-size: 0.75rem;">Brak raportów selekcji dla wybranego okresu</div>
+                </td>
+            </tr>
+        `;
+    } else {
+        let html = '';
+        reports.forEach(report => {
+            // Determine scrap color
+            let scrapColor = 'var(--color-ink-subtle)';
+            let scrapWeight = 'normal';
+            if (report.scrap_percentage >= 5) {
+                scrapColor = '#ef4444';
+                scrapWeight = '600';
+            } else if (report.scrap_percentage >= 2) {
+                scrapColor = '#f59e0b';
+                scrapWeight = '500';
+            } else if (report.scrap_percentage > 0) {
+                scrapColor = '#10b981';
+            }
+
+            html += `
+                <tr>
+                    <td style="font-size: 0.8125rem;">${report.data_selekcji}</td>
+                    <td style="font-size: 0.8125rem;">${report.dzial}</td>
+                    <td style="font-size: 0.8125rem;">${report.nr_raportu}</td>
+                    <td style="font-size: 0.8125rem;">${report.nr_niezgodnosci}</td>
+                    <td style="font-size: 0.8125rem;">${report.data_niezgodnosci}</td>
+                    <td style="font-size: 0.8125rem;">${report.nr_zamowienia}</td>
+                    <td style="font-size: 0.8125rem;">${report.kod_detalu}</td>
+                    <td style="font-size: 0.8125rem;">${report.nr_instrukcji}</td>
+                    <td style="text-align: center; font-size: 0.8125rem;">
+                        ${report.selekcja_na_biezaco
+                            ? '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color: #166534; border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Tak</span>'
+                            : '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Nie</span>'
+                        }
+                    </td>
+                    <td style="text-align: right; font-weight: 500; font-size: 0.8125rem;">${formatNumber(report.ilosc_detali_sprawdzonych)}</td>
+                    <td style="text-align: right; font-size: 0.8125rem;">
+                        ${report.total_defects > 0
+                            ? `<span style="color: #f59e0b; font-weight: 500;">${report.total_defects}</span>`
+                            : '<span style="color: var(--color-ink-subtle);">0</span>'
+                        }
+                    </td>
+                    <td style="font-size: 0.625rem; text-align: left;">${report.defekty}</td>
+                    <td style="text-align: right; font-size: 0.8125rem;">
+                        ${report.ilosc_detali_sprawdzonych > 0
+                            ? `<span style="color: ${scrapColor}; font-weight: ${scrapWeight};">${report.scrap_percentage.toFixed(1)}</span>`
+                            : '<span style="color: var(--color-ink-subtle);">-</span>'
+                        }
+                    </td>
+                    <td style="text-align: right; font-size: 0.8125rem;">${report.czas_pracy.toFixed(1)}</td>
+                    <td style="text-align: right; font-size: 0.8125rem;">${Math.round(report.rzeczywista_wydajnosc)}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
     }
 
-    window.location.search = params.toString();
+    // Update pagination counts
+    document.getElementById('visible-count').textContent = reports.length;
+    document.getElementById('total-count').textContent = reports.length;
+
+    // Update sort indicators
+    updateSortIndicators(sortBy, order);
 }
+
+// Update sort indicators in headers
+function updateSortIndicators(sortBy, order) {
+    document.querySelectorAll('.sort-icon').forEach(icon => {
+        icon.textContent = '';
+    });
+
+    const sortableHeaders = {
+        'data_selekcji': 0,
+        'operator': 1,
+        'nr_raportu': 2,
+        'nr_niezgodnosci': 3,
+        'data_niezgodnosci': 4,
+        'nr_zamowienia': 5,
+        'kod_detalu': 6,
+        'nr_instrukcji': 7,
+        'selekcja_na_biezaco': 8,
+        'ilosc_detali_sprawdzonych': 9,
+        'defekt': 11,
+        'czas_pracy': 13
+    };
+
+    const headerIndex = sortableHeaders[sortBy];
+    if (headerIndex !== undefined) {
+        const headers = document.querySelectorAll('th');
+        const sortIcon = headers[headerIndex].querySelector('.sort-icon');
+        if (sortIcon) {
+            sortIcon.textContent = order === 'desc' ? '▼' : '▲';
+        }
+    }
+}
+
+// Fetch data from API
+async function fetchData() {
+    const params = new URLSearchParams();
+
+    // Add sorting
+    params.set('sort', currentSort);
+    params.set('order', currentOrder);
+
+    // Add preset
+    params.set('preset', currentPreset);
+
+    // Add filter values
+    const filters = {
+        'filter_data_selekcji': document.getElementById('filter_data_selekcji')?.value || '',
+        'filter_operator': document.getElementById('filter_operator')?.value || '',
+        'filter_nr_raportu': document.getElementById('filter_nr_raportu')?.value || '',
+        'filter_nr_niezgodnosci': document.getElementById('filter_nr_niezgodnosci')?.value || '',
+        'filter_data_nc': document.getElementById('filter_data_nc')?.value || '',
+        'filter_commessa': document.getElementById('filter_commessa')?.value || '',
+        'filter_kod_detalu': document.getElementById('filter_kod_detalu')?.value || '',
+        'filter_defekt': document.getElementById('filter_defekt')?.value || ''
+    };
+
+    for (const [key, value] of Object.entries(filters)) {
+        if (value) {
+            params.set(key, value);
+        }
+    }
+
+    try {
+        console.log('Fetching data from:', `/api/dane-selekcji?${params.toString()}`);
+        const response = await fetch(`/api/dane-selekcji?${params.toString()}`);
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Received data:', data);
+
+        if (data.success) {
+            updateStats(data.stats);
+            updateTable(data.reports, data.sort_by, data.order);
+            currentSort = data.sort_by;
+            currentOrder = data.order;
+            console.log('Table updated successfully');
+        } else {
+            console.error('API returned success: false');
+        }
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
+}
+
+// Sort column (AJAX version)
+function sortColumn(column) {
+    console.log('sortColumn called with:', column);
+    if (currentSort === column) {
+        currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort = column;
+        currentOrder = 'desc';
+    }
+    console.log('New sort state:', currentSort, currentOrder);
+    fetchData();
+}
+
+// Apply filters (AJAX version)
+function applyFilters() {
+    fetchData();
+}
+
+// Change preset (AJAX version)
+function changePreset(preset) {
+    currentPreset = preset;
+
+    // Update active pill
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+        pill.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    fetchData();
+}
+
+// Handle search inputs
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInputs = document.querySelectorAll('.column-search');
+
+    searchInputs.forEach(input => {
+        input.addEventListener('keyup', function(e) {
+            if (e.key === 'Enter') {
+                applyFilters();
+            }
+        });
+    });
+
+    // Add click handlers to filter pills
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+        pill.addEventListener('click', function(e) {
+            e.preventDefault();
+            const preset = new URL(this.href).searchParams.get('preset') || 'all';
+            changePreset(preset);
+        });
+    });
+});
 </script>
 {% endblock %}

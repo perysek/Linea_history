@@ -242,7 +242,7 @@
 
 .refined-table th.sortable .sort-icon {
     opacity: 0;
-    margin-left: 0.25rem;
+    margin-left: 0.0rem;
     transition: opacity 0.2s ease;
 }
 
