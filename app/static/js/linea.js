@@ -22,6 +22,50 @@ document.addEventListener('DOMContentLoaded', () => {
             updateClearFiltersButton();  // Update button visibility
         }, 300));  // Reduced debounce for faster response
     });
+
+    // Intercept filter pill clicks to prevent page reload
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            e.preventDefault();
+            const href = pill.getAttribute('href');
+            const params = new URLSearchParams(href.substring(1)); // Remove leading '?'
+
+            // Update active pill
+            document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+
+            // Update URL without reload
+            history.pushState({}, '', '/linea/' + href);
+
+            // Fetch new data
+            fetchRecords();
+        });
+    });
+
+    // Intercept date range form submission
+    const dateForm = document.querySelector('.date-range-form');
+    if (dateForm) {
+        dateForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const dateFrom = document.getElementById('date_from').value;
+            const dateTo = document.getElementById('date_to').value;
+
+            // Build query string
+            const params = new URLSearchParams();
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+
+            // Update active pill (none)
+            document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+
+            // Update URL without reload
+            const queryString = params.toString();
+            history.pushState({}, '', '/linea/' + (queryString ? '?' + queryString : ''));
+
+            // Fetch new data
+            fetchRecords();
+        });
+    }
 });
 
 /**
