@@ -59,15 +59,22 @@ class VirtualScrollManager {
     }
 
     updateData(newData) {
+        console.log(`VirtualScroll: updating data (${newData.length} rows)`);
         this.data = newData;
+        // Reset scroll to top when data changes significantly
+        if (this.container.scrollTop > 0) {
+            this.container.scrollTop = 0;
+        }
         this.render();
     }
 
     render() {
+        const startTime = performance.now();
         const dataLength = this.data.length;
 
         if (dataLength === 0) {
             this.clearRows();
+            console.log('VirtualScroll: no data to render');
             return;
         }
 
@@ -94,6 +101,7 @@ class VirtualScrollManager {
 
         // Render visible rows
         const fragment = document.createDocumentFragment();
+        const rowsToRender = this.visibleEnd - this.visibleStart;
 
         for (let i = this.visibleStart; i < this.visibleEnd; i++) {
             const row = this.renderRow(this.data[i], i);
@@ -102,6 +110,9 @@ class VirtualScrollManager {
 
         // Insert rendered rows between spacers
         this.tbody.insertBefore(fragment, this.spacerBottom);
+
+        const renderTime = performance.now() - startTime;
+        console.log(`VirtualScroll: rendered ${rowsToRender} rows (${this.visibleStart}-${this.visibleEnd} of ${dataLength}) in ${renderTime.toFixed(2)}ms`);
     }
 
     clearRows() {

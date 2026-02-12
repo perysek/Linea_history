@@ -57,7 +57,20 @@ function initVirtualScroll() {
     const container = document.querySelector('.tbody-scroll');
     const tbody = document.getElementById('blocked-tbody');
 
-    if (!container || !tbody) return;
+    if (!container || !tbody) {
+        console.warn('Virtual scroll: container or tbody not found');
+        return;
+    }
+
+    if (filteredData.length === 0) {
+        console.log('Virtual scroll: no data to display');
+        return;
+    }
+
+    console.log(`Initializing virtual scroll with ${filteredData.length} rows`);
+
+    // Clear existing rows from tbody (keep server-rendered data in memory only)
+    tbody.innerHTML = '';
 
     virtualScroll = new VirtualScrollManager({
         container: container,
@@ -67,6 +80,8 @@ function initVirtualScroll() {
         bufferSize: 5,          // Render 5 extra rows above/below viewport
         renderRow: renderRow
     });
+
+    console.log('Virtual scroll initialized successfully');
 }
 
 /**
@@ -119,6 +134,8 @@ function debounce(func, wait) {
  * Apply search filters to data array
  */
 function applyFilters() {
+    console.log('Applying filters:', searchFilters);
+
     // Filter data array
     filteredData = allData.filter(item => {
         // Check each active filter
@@ -143,12 +160,17 @@ function applyFilters() {
         return true;
     });
 
+    console.log(`Filtered: ${filteredData.length} / ${allData.length} rows`);
+
     // Apply current sort to filtered data
     sortFilteredData();
 
     // Update virtual scroll with filtered data
     if (virtualScroll) {
+        console.log('Updating virtual scroll with filtered data');
         virtualScroll.updateData(filteredData);
+    } else {
+        console.warn('Virtual scroll not initialized!');
     }
 
     // Calculate totals

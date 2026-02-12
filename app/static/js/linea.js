@@ -48,12 +48,19 @@ async function fetchRecords() {
     // Show loading state
     tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
 
+    // Destroy existing virtual scroll if it exists
+    if (virtualScroll) {
+        virtualScroll.destroy();
+        virtualScroll = null;
+    }
+
     try {
         const response = await fetch(`/linea/api/search?${params}`);
         const data = await response.json();
 
         if (data.success) {
             allRecords = data.records;  // Store all records
+            filteredRecords = [...allRecords];  // Initialize filtered records
             applyFiltersAndSort();  // Apply filters and sort client-side
         } else {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych</td></tr>';
@@ -102,12 +109,8 @@ function applyFiltersAndSort() {
         return currentSort.direction === 'asc' ? comparison : -comparison;
     });
 
-    // Update virtual scroll or render directly
-    if (virtualScroll && filteredRecords.length > 0) {
-        virtualScroll.updateData(filteredRecords);
-    } else {
-        renderRecords(filteredRecords);
-    }
+    // Render records (will handle virtual scroll vs direct render)
+    renderRecords(filteredRecords);
 
     updateCount(filteredRecords.length);
 }
@@ -221,25 +224,50 @@ function handleRowClick(row) {
 }
 
 /**
- * Render records in table (fallback for small datasets)
+ * Render records in table with smart mode selection
  */
 function renderRecords(records) {
     const tbody = document.getElementById('linea-tbody');
+    const useVirtualScroll = records.length > 50;  // Lower threshold for better performance
 
     if (records.length === 0) {
+        // Destroy virtual scroll if exists
+        if (virtualScroll) {
+            virtualScroll.destroy();
+            virtualScroll = null;
+        }
         tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Brak rekordów spełniających kryteria</td></tr>';
         return;
     }
 
-    // For large datasets, use virtual scrolling
-    if (records.length > 100) {
-        // Clear tbody and init virtual scroll
-        tbody.innerHTML = '';
-        initVirtualScroll();
-        return;
-    }
+    if (useVirtualScroll) {
+        // Use virtual scrolling for better performance
+        if (virtualScroll) {
+            // Update existing virtual scroll
+            virtualScroll.updateData(records);
+        } else {
+            // Initialize new virtual scroll
+            tbody.innerHTML = '';  // Clear tbody
+            initVirtualScroll();
+        }
+    } else {
+        // Destroy virtual scroll if switching from virtual to direct
+        if (virtualScroll) {
+            virtualScroll.destroy();
+            virtualScroll = null;
+        }
 
-    // For small datasets, render directly (original behavior)
+        // For small datasets, render directly (original behavior)
+        renderRecordsDirect(records);
+    }
+}
+
+/**
+ * Direct rendering for small datasets (original implementation)
+ */
+function renderRecordsDirect(records) {
+    const tbody = document.getElementById('linea-tbody');
+
     tbody.innerHTML = records.map((record, index) => {
         const delay = Math.min(index * 0.03, 0.3);
         const hasRiparazione = record.CODICE_RIPARAZIONE && record.CODICE_RIPARAZIONE.trim();
