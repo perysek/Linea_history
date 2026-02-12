@@ -4,16 +4,23 @@
 LINEA Flask web application for manufacturing quality control and sorting area data management. The application integrates with MOSYS (external production database via pyodbc) and maintains its own SQLite database for sorting/selection data.
 
 **Recent changes**:
-- Created comprehensive MOSYS data fetching module (staged for commit)
+- Added automatic Excel data synchronization (staged for commit)
+  - New `app/utils/excel_sync.py` module for automatic data imports from PPM_wew.xlsm
+  - 5-minute cache to prevent excessive file scanning on every page load
+  - Uses (nr_raportu, nr_niezgodnosci) composite key to detect new rows
+  - Batch imports with MOSYS enrichment automatically on /dane-selekcji page loads
+  - Admin endpoint `/admin/sync-excel` for manual force sync
+  - Defect parsing and relationship creation maintained from migrate_excel_data.py pattern
+- Created comprehensive MOSYS data fetching module (commit 5452cc3)
   - 23+ functions organized into 6 categories: Tools Management, Tool Repairs, Tool Maintenance, Production Orders, Dimensional Control, Utility Functions
   - Type-safe pandas DataFrame interface with optional filtering on dates, codes, status
   - Accesses 11 MOSYS/STAAMPDB tables for complete production data retrieval
   - Advanced analytics: scrap rate analysis, press utilization, tool usage history
-- Complete sorting area database integration (staged for commit)
+- Complete sorting area database integration (commit e9b03ae)
   - Added comprehensive database models with SQLAlchemy (dzialy, operatorzy, dane_z_raportow, braki_defekty_raportow)
   - Created production-ready Excel migration tool with batch MOSYS enrichment, duplicate detection, and incremental import support
   - Set up Flask-Migrate with initial migration (1648cf2d4935) for schema version control
-  - Enhanced /dane-selekcji dashboard with 9 text filters and 11 sortable columns
+  - Enhanced /dane-selekcji dashboard with 9 text filters and 11 sortable columns (commit 0760e68)
   - Implemented filter state persistence and advanced query optimization (joins, eager loading, batch API calls)
   - Migrated from Pervasive/STAAMP to dual-database architecture (SQLite for sorting, MOSYS via pyodbc read-only)
 
@@ -145,6 +152,7 @@ Full implementation of selection data dashboard (replaced placeholder in commit 
 - Responsive data table with 15 columns:
   - Sortable columns with ▼/▲ indicators (11 columns: data_selekcji, operator, nr_raportu, nr_niezgodnosci, data_niezgodnosci, nr_zamowienia, kod_detalu, nr_instrukcji, selekcja_na_biezaco, ilosc_detali_sprawdzonych, defekt)
   - Column search inputs on 9 columns (DATA, DZIAŁ, RAPORT, NR NC, DATA NC, ZAM, KOD DETALU, INSTR, WADY)
+  - Real-time filtering with 300ms debounce on all search inputs
   - Fixed column widths using colgroup
   - Color-coded indicators:
     - Scrap rate: red (≥5%), orange (≥2%), green (>0%)
@@ -409,6 +417,11 @@ Web Dashboard (Jinja2 templates)
   - Inline styles for component-specific adjustments
   - Font size 0.6875rem (11px) for table data, 0.625rem (10px) for dense content
 - **CSS organization**: Main styles in `static/css/linea.css`, component-specific styles inline in templates
+- **JavaScript patterns**:
+  - Real-time search filtering: Use debounce helper with 300ms delay to prevent excessive server requests
+  - Debounce implementation: Standard pattern with timeout reset on each input event
+  - Event binding: Use `addEventListener('input', debounce(callback, 300))` on `.column-search` inputs
+  - Pattern matches `linea/index.html` implementation for consistency
 
 ### Query Optimization
 - **Eager loading**: Always use `joinedload()` for relationships accessed in templates
@@ -423,9 +436,9 @@ The `.gitignore` file excludes:
 - Environment files: `.env`, `.env.production`, `.env.local`
 - IDE files: `.vscode/`, `.idea/`, `.DS_Store`
 - Data files: `*.xlsx`, `*.xls`, `*.db` (database is generated, not committed)
-- Temporary helper scripts: `check_db.py`, `seed_database.py`, `verify_import.py`, `Tasks_*.txt`
+- Temporary helper scripts: `check_db.py`, `seed_database.py`, `verify_import.py`, `debug_tables.py`, `calculate_column_widths.py`, `extract_table_columns.py`, `Tasks_*.txt`
 - Legacy Flet app files: `collaudo10_1.py`, `crud.py`, `main.py`, etc.
-- Claude/development artifacts: `.claude/`, `.playwright-mcp/`, `examples/`, `docs/`
+- Claude/development artifacts: `.claude/`, `.playwright-mcp/`, `examples/`, `docs/`, `.full-review/`
 
 **Important**: SQLite database (`linea.db`) is excluded from version control. Use migrations to recreate schema, then import data using `migrate_excel_data.py`.
 
@@ -517,15 +530,15 @@ MOSYS_data_functions.py     - Legacy MOSYS integration functions (blocked parts,
 mosys_data_fetching.py      - Comprehensive MOSYS data fetching module (23+ functions, 6 categories)
 migrate_excel_data.py       - Excel to SQLite data migration tool (PPM_wew.xlsm import)
 check_db.py                 - Database inspection utility (temporary, in .gitignore)
-debug_tables.py             - Database table debugging utility (temporary, in .gitignore)
-extract_table_columns.py    - Table column extraction utility (temporary, in .gitignore)
-inspect_mosys_database.py   - MOSYS database structure inspector (temporary, in .gitignore)
-calculate_column_widths.py  - Column width calculation tool (temporary, in .gitignore)
 seed_database.py            - Test data seeding utility (temporary, in .gitignore)
 verify_import.py            - Import verification utility (temporary, in .gitignore)
+inspect_mosys_database.py   - MOSYS database structure inspector (temporary, in .gitignore)
+debug_tables.py             - Database table debugging utility (temporary, in .gitignore)
+calculate_column_widths.py  - Column width calculation tool (temporary, in .gitignore)
+extract_table_columns.py    - Table column extraction utility (temporary, in .gitignore)
 linea.db                    - SQLite database (generated, in .gitignore)
 
-.gitignore              - Excludes: venv, __pycache__, .env, .claude/, *.db, *.xlsx, helper scripts, Tasks_*.txt
+.gitignore              - Excludes: venv, __pycache__, .env, .claude/, *.db, *.xlsx, helper scripts, .full-review/, Tasks_*.txt
 ```
 
 ## Recent Changes (Staged for Commit)

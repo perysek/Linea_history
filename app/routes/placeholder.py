@@ -1,10 +1,11 @@
 """Placeholder routes for features under development."""
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, current_app
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app import db
 from app.models.sorting_area import DaneRaportu, BrakiDefektyRaportu, Operator, KategoriaZrodlaDanych
+from app.utils.excel_sync import sync_new_excel_data
 
 placeholder_bp = Blueprint('placeholder', __name__)
 
@@ -56,6 +57,15 @@ def get_blocked_boxes(nr_niezgodnosci):
 @placeholder_bp.route('/dane-selekcji')
 def dane_selekcji():
     """Dashboard view with report table - optimized with pagination and date filters."""
+
+    # Sync new Excel data automatically (with 5-minute cache)
+    try:
+        sync_result = sync_new_excel_data()
+        if sync_result['new_records'] > 0:
+            current_app.logger.info(f"Excel sync: imported {sync_result['new_records']} new records")
+    except Exception as e:
+        current_app.logger.error(f"Excel sync failed: {e}")
+        # Continue anyway - don't block page load if sync fails
 
     # Sorting params
     sort_by = request.args.get('sort', 'data_selekcji')
@@ -554,3 +564,21 @@ def utrzymanie_form():
 def kontrola_jakosci():
     """Kontrola jakości - under construction."""
     return render_template('placeholder/kontrola_jakosci.html')
+
+
+@placeholder_bp.route('/admin/sync-excel', methods=['POST'])
+def admin_sync_excel():
+    """Admin endpoint to manually force Excel data sync."""
+    try:
+        from app.utils.excel_sync import force_sync
+        sync_result = force_sync()
+        return jsonify({
+            'success': True,
+            'sync_result': sync_result
+        })
+    except Exception as e:
+        current_app.logger.error(f"Manual Excel sync failed: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

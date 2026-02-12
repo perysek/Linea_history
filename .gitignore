@@ -79,7 +79,13 @@ seed_database.py
 verify_import.py
 inspect_mosys_database.py
 mosys_database_structure.txt
+debug_tables.py
+calculate_column_widths.py
+extract_table_columns.py
 Tasks_*.txt
+
+# Code review artifacts
+.full-review/
 
 # Other utility scripts
 linkedin_data.py
