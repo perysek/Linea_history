@@ -4,6 +4,11 @@
 LINEA Flask web application for manufacturing quality control and sorting area data management. The application integrates with MOSYS (external production database via pyodbc) and maintains its own SQLite database for sorting/selection data.
 
 **Recent changes**:
+- Created comprehensive MOSYS data fetching module (staged for commit)
+  - 23+ functions organized into 6 categories: Tools Management, Tool Repairs, Tool Maintenance, Production Orders, Dimensional Control, Utility Functions
+  - Type-safe pandas DataFrame interface with optional filtering on dates, codes, status
+  - Accesses 11 MOSYS/STAAMPDB tables for complete production data retrieval
+  - Advanced analytics: scrap rate analysis, press utilization, tool usage history
 - Complete sorting area database integration (staged for commit)
   - Added comprehensive database models with SQLAlchemy (dzialy, operatorzy, dane_z_raportow, braki_defekty_raportow)
   - Created production-ready Excel migration tool with batch MOSYS enrichment, duplicate detection, and incremental import support
@@ -253,15 +258,83 @@ flask db downgrade                  # Rollback migrations
 ## Integration Points
 
 ### MOSYS Integration
-The application integrates with an external MOSYS database:
+The application integrates with an external MOSYS database for production data:
+
+**Connection Architecture**:
 - Connection: Direct pyodbc (not via SQLAlchemy)
-- Functions in `MOSYS_data_functions.py`:
-  - `get_all_blocked_parts()` - Blocked parts list with production date ranges
-  - `get_blocked_boxes_details(nr_niezgodnosci)` - Box details for specific NC number
-  - `get_batch_niezgodnosc_details(nr_list)` - Batch fetch for multiple NC numbers (returns dict mapping NC to details)
-- Data caching: NC dates, order numbers, part codes cached in DaneRaportu table
-- Lazy loading pattern: Reports with missing cached MOSYS data are batch-fetched and committed once
-- Used by: migrate_excel_data.py for historical data enrichment, placeholder.py routes for live data
+- Connection function: `get_pervasive()` from `MOSYS_con.py`
+- Database: STAAMPDB (Pervasive SQL)
+- Read-only access: All MOSYS operations are SELECT queries only
+
+**Legacy Functions** (`MOSYS_data_functions.py`):
+- `get_all_blocked_parts()` - Blocked parts list with production date ranges
+- `get_blocked_boxes_details(nr_niezgodnosci)` - Box details for specific NC number
+- `get_batch_niezgodnosc_details(nr_list)` - Batch fetch for multiple NC numbers (returns dict mapping NC to details)
+
+**Comprehensive Data Fetching Module** (`mosys_data_fetching.py`):
+
+New comprehensive module with 23+ functions organized into 6 categories. All functions return pandas DataFrames and include type hints, optional filtering parameters, and proper documentation.
+
+**1. Tools Management** (3 functions):
+- `get_tool_details(tool_code)` - STAMPI table: tool/mold details including specifications, dimensions, owner info, location (18 columns)
+- `get_tool_relationships(tool_code)` - STAMPI2 table: tool hierarchy, parent/child relationships, base tool codes (5 columns)
+- `get_tool_location(location_code)` - Tools filtered by location code or list of all locations (5 columns)
+
+**2. Tool Repairs** (4 functions):
+- `get_tool_repairs(tool_code, start_date, end_date, status)` - RIPARAZ table: repair records with date range and status filtering (18 columns including NOTE01-NOTE10)
+- `get_repair_details(repair_code)` - RIPARAZ1 table: detailed repair info for specific repair code (7 columns)
+- `get_active_repairs()` - All currently active repairs (no end date set)
+- `get_urgent_repairs()` - Urgent repairs flagged for immediate attention (FLAG_PROVA_URGENTE = 1)
+
+**3. Tool Maintenance** (5 functions):
+- `get_maintenance_schedule(machine_type, machine_code)` - MANORD table: scheduled maintenance with intervals and dates (13 columns including DESC01-DESC15)
+- `get_overdue_maintenance()` - Maintenance tasks past their due date (DATA_PROSSIMA_MAN < today)
+- `get_upcoming_maintenance(days_ahead)` - Maintenance due within specified days (default 30)
+- `get_scheduled_maintenance_records(machine_type, machine_code, start_date, end_date)` - REGMANU table: executed scheduled maintenance records (12 columns)
+- `get_unscheduled_maintenance_records(machine_type, machine_code, start_date, end_date)` - REGMANUS table: unscheduled/simple maintenance records with hours worked (10 columns)
+
+**4. Production Orders** (5 functions):
+- `get_quality_tests(test_number, press, order_number, start_date, end_date)` - COLLAUDO table: quality test records with operator info (15 columns)
+- `get_production_batches(order_number, press, tool_code, article, start_date, end_date)` - COLLPROD table: production batch control records (12 columns)
+- `get_production_parameters(press, tool_code, order_number)` - PARPROD table: comprehensive production parameters (70 columns including ULT_TEMP_01-10, cycle times, parts/scrap counts, MIN/MAX/TOT statistics)
+- `get_production_summary(press, tool_code, order_number)` - Summary view of PARPROD: parts produced, scrap counts, cycle times (9 columns)
+- `get_scrap_analysis(press, tool_code, min_scrap_rate)` - Analyzes scrap rates with calculated SCRAP_RATE_% (filters by minimum rate threshold)
+
+**5. Dimensional Control** (4 functions):
+- `get_dimension_characteristics(article_code, characteristic_ref)` - SCHEDIM1 table: dimensional characteristics with tolerances (19 columns including nominal values, tolerances, min/max acceptable/detectable/detected)
+- `get_new_dimension_checks(article_code, control_code)` - NSCHEDIM table: new dimensional check definitions with frequency and measurement parameters (16 columns)
+- `get_characteristics_present(order_number, press, start_date, end_date)` - CARPRES table: characteristics measured during production (24 columns including production times, parts counts, delays)
+- `get_characteristics_master(char_type, char_code)` - ESPCARMT table: characteristics master data with pricing and inventory info (12 columns)
+
+**6. Utility Functions** (3 functions):
+- `get_active_orders()` - Active production orders from CARPRES (excludes COMPLETATO, CHIUSO, ANNULLATO states)
+- `get_press_utilization(press_code, days_back)` - Dictionary with press statistics: total batches/parts/scrap, avg cycle time, tools used, scrap rate % (default 30 days)
+- `get_tool_usage_history(tool_code, days_back)` - Combined DataFrame of production, maintenance, and repair events for tool (default 90 days)
+
+**Function Features**:
+- Type hints: All functions include proper type annotations for parameters and return types
+- Optional parameters: Flexible filtering using Optional[] for all filter parameters
+- Date handling: Accepts datetime objects, converts to string format for queries
+- Sorted results: Most functions include ORDER BY clauses for logical result ordering
+- Empty handling: Functions return empty DataFrames when no data found (not errors)
+- Defensive queries: WHERE 1=1 pattern for building dynamic conditions safely
+
+**Data Tables Accessed**:
+- STAMPI, STAMPI2 - Tool/mold master data
+- RIPARAZ, RIPARAZ1 - Repair tracking
+- MANORD, REGMANU, REGMANUS - Maintenance scheduling and records
+- COLLAUDO, COLLPROD, PARPROD - Production quality tests, batches, and parameters
+- SCHEDIM1, NSCHEDIM, CARPRES, ESPCARMT - Dimensional control and characteristics
+
+**Data Caching Pattern**:
+- NC dates, order numbers, part codes cached in DaneRaportu table
+- Lazy loading: Reports with missing cached MOSYS data are batch-fetched and committed once
+- Batch functions preferred over individual queries for performance
+
+**Usage**:
+- `migrate_excel_data.py` - Historical data enrichment from Excel imports
+- `app/routes/placeholder.py` - Live data for web dashboard routes
+- Future features - Tool maintenance tracking, quality control workflows, production analysis
 
 ## Data Import Workflow
 
@@ -438,22 +511,28 @@ migrations/             - Flask-Migrate (Alembic) migrations for SQLite schema
   script.py.mako        - Migration template
   README                - Migration documentation
 
-config.py               - Environment-based configuration (SQLite for sorting, MOSYS separate)
-MOSYS_data_functions.py - MOSYS database integration functions (pyodbc, read-only)
-migrate_excel_data.py   - Excel to SQLite data migration tool (PPM_wew.xlsm import)
-check_db.py             - Database inspection utility (temporary, in .gitignore)
-seed_database.py        - Test data seeding utility (temporary, in .gitignore)
-verify_import.py        - Import verification utility (temporary, in .gitignore)
-linea.db                - SQLite database (generated, in .gitignore)
+config.py                   - Environment-based configuration (SQLite for sorting, MOSYS separate)
+MOSYS_con.py                - MOSYS connection helper (pyodbc connection function)
+MOSYS_data_functions.py     - Legacy MOSYS integration functions (blocked parts, NC details)
+mosys_data_fetching.py      - Comprehensive MOSYS data fetching module (23+ functions, 6 categories)
+migrate_excel_data.py       - Excel to SQLite data migration tool (PPM_wew.xlsm import)
+check_db.py                 - Database inspection utility (temporary, in .gitignore)
+debug_tables.py             - Database table debugging utility (temporary, in .gitignore)
+extract_table_columns.py    - Table column extraction utility (temporary, in .gitignore)
+inspect_mosys_database.py   - MOSYS database structure inspector (temporary, in .gitignore)
+calculate_column_widths.py  - Column width calculation tool (temporary, in .gitignore)
+seed_database.py            - Test data seeding utility (temporary, in .gitignore)
+verify_import.py            - Import verification utility (temporary, in .gitignore)
+linea.db                    - SQLite database (generated, in .gitignore)
 
 .gitignore              - Excludes: venv, __pycache__, .env, .claude/, *.db, *.xlsx, helper scripts, Tasks_*.txt
 ```
 
 ## Recent Changes (Staged for Commit)
 
-**Complete Sorting Area Database Integration**
+**Complete MOSYS Data Fetching Module + Sorting Area Database Integration**
 
-Major architectural migration to dual-database system with comprehensive data management tools:
+Created comprehensive MOSYS data fetching functions module with 23+ functions organized into 6 categories providing flexible access to production, maintenance, quality, and tool management data. Major architectural migration to dual-database system with comprehensive data management tools:
 
 **Database Architecture**:
 - Created 4 SQLAlchemy models for sorting workflow (KategoriaZrodlaDanych, Operator, DaneRaportu, BrakiDefektyRaportu)
@@ -482,15 +561,28 @@ Major architectural migration to dual-database system with comprehensive data ma
   - Identical filter logic applied to data, stats, and defects queries
 - Column-level search inputs on 9 columns with preserved filter values
 
+**New MOSYS Data Fetching Module** (`mosys_data_fetching.py`):
+- 23+ functions organized into 6 categories (Tools Management, Tool Repairs, Tool Maintenance, Production Orders, Dimensional Control, Utility Functions)
+- Type hints and comprehensive documentation for all functions
+- Flexible filtering parameters (dates, codes, status filters) on all query functions
+- Date range handling with datetime objects converted to SQL-compatible strings
+- Returns pandas DataFrames for easy integration with analysis workflows
+- Accesses 11 MOSYS/STAAMPDB tables: STAMPI, STAMPI2, RIPARAZ, RIPARAZ1, MANORD, REGMANU, REGMANUS, COLLAUDO, COLLPROD, PARPROD, SCHEDIM1, NSCHEDIM, CARPRES, ESPCARMT
+- Advanced analytics functions: scrap rate analysis, press utilization statistics, tool usage history
+- Example usage patterns in `__main__` section for testing and documentation
+
 **File Updates**:
 - `app/__init__.py` - Added SQLAlchemy/Flask-Migrate initialization within app context
 - `app/models/sorting_area.py` - Complete model definitions with relationships and computed properties
 - `app/models/__init__.py` - Export configuration for sorting_area models
 - `app/routes/placeholder.py` - Implemented dane_selekcji route with filtering, batch MOSYS lazy loading
 - `app/templates/placeholder/dane_selekcji.html` - Full dashboard with sortable columns, search inputs, stat cards
+- `app/static/css/linea.css` - Updated styles for dashboard components
 - `config.py` - Switched from Pervasive ODBC to SQLite with connection pooling
-- `.gitignore` - Added exclusions for *.db, helper scripts (check_db.py, seed_database.py, verify_import.py)
+- `.gitignore` - Added exclusions for *.db, helper scripts, temporary utility scripts
 - `migrations/` - Complete Alembic setup with initial migration creating all 4 tables
+- `mosys_data_fetching.py` - **NEW**: Comprehensive MOSYS data access layer with 23+ functions
+- Helper utilities: `check_db.py`, `debug_tables.py`, `extract_table_columns.py`, `inspect_mosys_database.py`, `calculate_column_widths.py` (all in .gitignore)
 
 **Technical Patterns**:
 - Batch MOSYS queries instead of N+1 calls (collect IDs → single batch fetch → commit once)
@@ -527,3 +619,51 @@ Key patterns used throughout the application:
 - **Filter consistency**: Apply identical filters to main query, stats query, and related queries
 - **Batch external calls**: Collect missing data IDs → single batch MOSYS call → single commit
 - **Type casting**: `.cast(db.String)` enables LIKE operations on Date columns in SQLite
+
+### MOSYS Data Fetching Module Design
+**Key Design Patterns**:
+1. **Function Organization**: Functions grouped by business domain (tools, repairs, maintenance, production, quality)
+2. **Consistent Interface**: All functions return pandas DataFrames for consistent data handling
+3. **Type Safety**: Full type hints using Optional[] for filters, datetime for dates, pd.DataFrame for returns
+4. **Flexible Filtering**: Optional parameters allow broad queries or precise filtering without complex overloads
+5. **Defensive SQL**: WHERE 1=1 pattern enables safe dynamic condition building without edge cases
+6. **Sorted Results**: ORDER BY clauses on appropriate columns for logical result presentation
+7. **Date Handling**: Accept datetime objects, convert to SQL-compatible strings internally
+8. **Empty Results**: Return empty DataFrames instead of errors when no data found
+9. **Documentation First**: Comprehensive docstrings with Args, Returns, and column listings for every function
+
+**Advantages of this approach**:
+- Predictable: All functions follow same pattern (filter parameters → DataFrame result)
+- Discoverable: Clear function names indicate purpose (get_active_repairs, get_overdue_maintenance)
+- Composable: DataFrames can be combined, filtered, and analyzed using pandas operations
+- Testable: Functions are pure (no side effects), easy to unit test with mock data
+- Maintainable: Single responsibility per function, easy to add new functions following same pattern
+
+**Usage Patterns**:
+```python
+# Simple query - get all tools
+tools = get_tool_details()
+
+# Filtered query - specific tool
+tool = get_tool_details(tool_code='TOOL123')
+
+# Date range query - repairs in last month
+from datetime import datetime, timedelta
+start = datetime.now() - timedelta(days=30)
+repairs = get_tool_repairs(start_date=start)
+
+# Multiple filters combined
+repairs = get_tool_repairs(
+    tool_code='TOOL123',
+    start_date=start,
+    status='IN_PROGRESS'
+)
+
+# Analytics functions return computed results
+stats = get_press_utilization('PRESS01', days_back=30)
+# Returns dict: {'press_code', 'total_batches', 'total_parts', 'scrap_rate_%', ...}
+
+# Complex analysis combining multiple functions
+tool_history = get_tool_usage_history('TOOL123', days_back=90)
+# Returns combined DataFrame with production + maintenance + repair events
+```

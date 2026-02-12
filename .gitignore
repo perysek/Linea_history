@@ -77,6 +77,8 @@ MOSYS_con.py
 check_db.py
 seed_database.py
 verify_import.py
+inspect_mosys_database.py
+mosys_database_structure.txt
 Tasks_*.txt
 
 # Other utility scripts
