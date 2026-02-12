@@ -494,8 +494,15 @@ def api_dane_selekcji():
         if stats_result[2] > 0:
             avg_productivity = stats_result[1] / stats_result[2]
 
-    # Get all results
-    reports = query.all()
+    # Get total count for pagination (BEFORE applying limit/offset)
+    total_count = query.count()
+
+    # Pagination params
+    limit = request.args.get('limit', 100, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    # Apply pagination and fetch only visible rows
+    reports = query.limit(limit).offset(offset).all()
 
     # Format reports for JSON
     reports_data = []
@@ -537,6 +544,13 @@ def api_dane_selekcji():
             'average_productivity': avg_productivity
         },
         'reports': reports_data,
+        'pagination': {
+            'total': total_count,
+            'limit': limit,
+            'offset': offset,
+            'loaded': len(reports_data),
+            'has_more': offset + limit < total_count
+        },
         'sort_by': sort_by,
         'order': order
     })

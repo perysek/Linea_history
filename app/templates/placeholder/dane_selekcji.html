@@ -380,11 +380,26 @@
         </div>
 
         <!-- Pagination Bar -->
-        <div class="pagination-bar">
+        <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center;">
             <span class="pagination-info">
                 Wyświetlono <span class="pagination-count" id="visible-count">{{ reports|length }}</span>
                 z <span class="pagination-count" id="total-count">{{ reports|length }}</span> rekordów
             </span>
+            <button type="button"
+                    id="btn-load-more"
+                    onclick="loadMore()"
+                    style="padding: 0.5rem 1rem;
+                           background: var(--color-accent);
+                           color: white;
+                           border: none;
+                           border-radius: 6px;
+                           font-size: 0.875rem;
+                           font-weight: 500;
+                           cursor: pointer;
+                           display: none;
+                           transition: background 0.2s;">
+                Załaduj więcej
+            </button>
         </div>
     </div>
 </div>
@@ -398,6 +413,12 @@ let currentPreset = '{{ preset }}';
 // Loading state and abort controller for cancelling requests
 let isLoading = false;
 let currentAbortController = null;
+
+// Pagination state
+let allReports = [];
+let totalRecords = 0;
+let currentOffset = 0;
+const RECORDS_PER_PAGE = 100;
 
 // Format number with spaces as thousand separator
 function formatNumber(num) {
@@ -487,12 +508,22 @@ function updateTable(reports, sortBy, order) {
         tbody.innerHTML = html;
     }
 
-    // Update pagination counts
-    document.getElementById('visible-count').textContent = reports.length;
-    document.getElementById('total-count').textContent = reports.length;
-
     // Update sort indicators
     updateSortIndicators(sortBy, order);
+}
+
+// Update pagination info display
+function updatePaginationInfo(pagination) {
+    document.getElementById('visible-count').textContent = allReports.length;
+    document.getElementById('total-count').textContent = pagination.total;
+
+    // Show/hide Load More button
+    const loadMoreBtn = document.getElementById('btn-load-more');
+    if (pagination.has_more) {
+        loadMoreBtn.style.display = 'inline-block';
+    } else {
+        loadMoreBtn.style.display = 'none';
+    }
 }
 
 // Update sort indicators in headers
@@ -527,11 +558,17 @@ function updateSortIndicators(sortBy, order) {
 }
 
 // Fetch data from API
-async function fetchData() {
+async function fetchData(resetOffset = true) {
     // Cancel any existing request
     if (currentAbortController) {
         console.log('Aborting previous request');
         currentAbortController.abort();
+    }
+
+    // Reset offset when sorting/filtering changes
+    if (resetOffset) {
+        currentOffset = 0;
+        allReports = [];
     }
 
     // Create new abort controller for this request
@@ -546,6 +583,10 @@ async function fetchData() {
 
     // Add preset
     params.set('preset', currentPreset);
+
+    // Add pagination
+    params.set('limit', RECORDS_PER_PAGE);
+    params.set('offset', currentOffset);
 
     // Add filter values
     const filters = {
@@ -576,10 +617,23 @@ async function fetchData() {
 
         if (data.success) {
             updateStats(data.stats);
-            updateTable(data.reports, data.sort_by, data.order);
+
+            // Store pagination info
+            totalRecords = data.pagination.total;
+            currentOffset = data.pagination.offset;
+
+            // Append or replace reports
+            if (resetOffset) {
+                allReports = data.reports;
+            } else {
+                allReports = allReports.concat(data.reports);
+            }
+
+            updateTable(allReports, data.sort_by, data.order);
+            updatePaginationInfo(data.pagination);
             currentSort = data.sort_by;
             currentOrder = data.order;
-            console.log('Table updated successfully');
+            console.log(`Loaded ${data.pagination.loaded} records (${currentOffset}-${currentOffset + data.pagination.loaded} of ${totalRecords})`);
         } else {
             console.error('API returned success: false');
         }
@@ -612,13 +666,25 @@ function sortColumn(column) {
     }
     console.log('New sort state:', currentSort, currentOrder);
 
-    // fetchData will automatically cancel any in-progress request
-    fetchData();
+    // fetchData will automatically cancel any in-progress request and reset to first page
+    fetchData(true);
 }
 
 // Apply filters (AJAX version)
 function applyFilters() {
-    fetchData();
+    // Reset to first page when filters change
+    fetchData(true);
+}
+
+// Load more records
+function loadMore() {
+    if (isLoading) {
+        console.log('Already loading data...');
+        return;
+    }
+
+    currentOffset += RECORDS_PER_PAGE;
+    fetchData(false);  // Don't reset offset
 }
 
 // Change preset (AJAX version)
@@ -631,7 +697,8 @@ function changePreset(preset) {
     });
     event.target.classList.add('active');
 
-    fetchData();
+    // Reset to first page when preset changes
+    fetchData(true);
 }
 
 // Refresh Excel data (force sync)
