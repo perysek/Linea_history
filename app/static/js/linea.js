@@ -266,7 +266,7 @@ function renderSingleRow(record, index) {
 }
 
 /**
- * Handle row click event
+ * Handle row click event for virtual scrolled rows
  */
 function handleRowClick(row) {
     const codiceRiparazione = row.getAttribute('data-codice-riparazione');
@@ -373,7 +373,7 @@ function renderRecordsDirect(records) {
 
     // Add click handlers to clickable rows
     document.querySelectorAll('.clickable-row').forEach(row => {
-        row.addEventListener('click', handleRowClick);
+        row.addEventListener('click', () => handleRowClick(row));
     });
 }
 
@@ -468,18 +468,6 @@ function clearAllFilters() {
     updateClearFiltersButton();
 }
 
-/**
- * Handle clickable row click - open modal with repair details and/or blocked parts info
- */
-async function handleRowClick(event) {
-    const row = event.currentTarget;
-    const codiceRiparazione = row.dataset.codiceRiparazione;
-    const nrNiezg = row.dataset.nrNiezg;
-
-    if (codiceRiparazione || nrNiezg) {
-        await openDetailsModal(codiceRiparazione, nrNiezg);
-    }
-}
 
 /**
  * Open details modal - shows repair details and/or blocked parts info
