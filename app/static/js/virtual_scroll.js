@@ -24,6 +24,16 @@ class VirtualScrollManager {
     }
 
     init() {
+        this.createSpacers();
+
+        // Bind scroll handler
+        this.container.addEventListener('scroll', () => this.handleScroll(), { passive: true });
+
+        // Initial render
+        this.render();
+    }
+
+    createSpacers() {
         // Create spacer elements for virtual scrolling
         this.spacerTop = document.createElement('tr');
         this.spacerTop.className = 'virtual-scroll-spacer-top';
@@ -36,12 +46,19 @@ class VirtualScrollManager {
         // Add spacers to tbody
         this.tbody.insertBefore(this.spacerTop, this.tbody.firstChild);
         this.tbody.appendChild(this.spacerBottom);
+    }
 
-        // Bind scroll handler
-        this.container.addEventListener('scroll', () => this.handleScroll(), { passive: true });
+    reinitializeSpacers() {
+        // Remove old spacers if they exist
+        if (this.spacerTop && this.spacerTop.parentNode) {
+            this.spacerTop.remove();
+        }
+        if (this.spacerBottom && this.spacerBottom.parentNode) {
+            this.spacerBottom.remove();
+        }
 
-        // Initial render
-        this.render();
+        // Create new spacers
+        this.createSpacers();
     }
 
     handleScroll() {
@@ -78,6 +95,12 @@ class VirtualScrollManager {
             return;
         }
 
+        // Verify spacers still exist in DOM (they might have been removed)
+        if (!this.spacerBottom.parentNode || !this.spacerTop.parentNode) {
+            console.warn('VirtualScroll: spacers lost from DOM, reinitializing...');
+            this.reinitializeSpacers();
+        }
+
         // Calculate visible range
         const scrollTop = this.container.scrollTop;
         const containerHeight = this.container.clientHeight;
@@ -109,7 +132,13 @@ class VirtualScrollManager {
         }
 
         // Insert rendered rows between spacers
-        this.tbody.insertBefore(fragment, this.spacerBottom);
+        try {
+            this.tbody.insertBefore(fragment, this.spacerBottom);
+        } catch (error) {
+            console.error('VirtualScroll: insertBefore failed, reinitializing spacers', error);
+            this.reinitializeSpacers();
+            this.tbody.insertBefore(fragment, this.spacerBottom);
+        }
 
         const renderTime = performance.now() - startTime;
         console.log(`VirtualScroll: rendered ${rowsToRender} rows (${this.visibleStart}-${this.visibleEnd} of ${dataLength}) in ${renderTime.toFixed(2)}ms`);
