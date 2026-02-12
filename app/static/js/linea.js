@@ -119,6 +119,8 @@ async function fetchRecords() {
  * Apply filters and sort client-side with virtual scrolling
  */
 function applyFiltersAndSort() {
+    console.log(`applyFiltersAndSort: sorting by ${currentSort.field} ${currentSort.direction}`);
+
     // Start with all records
     let filtered = allRecords;
 
@@ -132,6 +134,8 @@ function applyFiltersAndSort() {
             });
         }
     });
+
+    console.log(`Filtered: ${filtered.length} records, sorting by ${currentSort.field}`);
 
     // Sort the filtered results
     filteredRecords = [...filtered].sort((a, b) => {
@@ -152,6 +156,12 @@ function applyFiltersAndSort() {
 
         return currentSort.direction === 'asc' ? comparison : -comparison;
     });
+
+    // Log first few sorted values for debugging
+    if (filteredRecords.length > 0) {
+        const first3 = filteredRecords.slice(0, 3).map(r => r[currentSort.field] || r.DATA_RAW);
+        console.log(`First 3 sorted values:`, first3);
+    }
 
     // Render records (will handle virtual scroll vs direct render)
     renderRecords(filteredRecords);
@@ -271,8 +281,12 @@ function handleRowClick(row) {
  * Render records in table with smart mode selection
  */
 function renderRecords(records) {
+    console.log(`renderRecords: ${records.length} records, virtual scroll ${virtualScroll ? 'EXISTS' : 'NULL'}`);
+
     const tbody = document.getElementById('linea-tbody');
     const useVirtualScroll = records.length > 50;  // Lower threshold for better performance
+
+    console.log(`useVirtualScroll: ${useVirtualScroll} (threshold: 50)`);
 
     if (records.length === 0) {
         // Destroy virtual scroll if exists
@@ -288,20 +302,24 @@ function renderRecords(records) {
         // Use virtual scrolling for better performance
         if (virtualScroll) {
             // Update existing virtual scroll
+            console.log('Updating existing virtual scroll with sorted data');
             virtualScroll.updateData(records);
         } else {
             // Initialize new virtual scroll
+            console.log('Initializing new virtual scroll');
             tbody.innerHTML = '';  // Clear tbody
             initVirtualScroll();
         }
     } else {
         // Destroy virtual scroll if switching from virtual to direct
         if (virtualScroll) {
+            console.log('Destroying virtual scroll, switching to direct render');
             virtualScroll.destroy();
             virtualScroll = null;
         }
 
         // For small datasets, render directly (original behavior)
+        console.log('Using direct render for small dataset');
         renderRecordsDirect(records);
     }
 }
@@ -363,6 +381,8 @@ function renderRecordsDirect(records) {
  * Sort table by column
  */
 function sortTable(field) {
+    console.log(`sortTable called: field=${field}, currentField=${currentSort.field}, currentDirection=${currentSort.direction}`);
+
     if (currentSort.field === field) {
         // Toggle direction if same field
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -371,6 +391,8 @@ function sortTable(field) {
         currentSort.field = field;
         currentSort.direction = 'asc';
     }
+
+    console.log(`New sort state: field=${currentSort.field}, direction=${currentSort.direction}`);
 
     // Update sort icon visual state
     document.querySelectorAll('.refined-table th').forEach(th => {
