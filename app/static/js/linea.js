@@ -1,11 +1,13 @@
 /**
- * LINEA - JavaScript for AJAX search, sorting, and filtering
+ * LINEA - JavaScript for AJAX search, sorting, and filtering with virtual scrolling
  * Refined Minimal Design System
  */
 
 let currentSort = { field: 'DATA', direction: 'desc' };  // Default: newest to oldest
 let searchFilters = {};
-let allRecords = [];  // Store all fetched records for client-side sorting
+let allRecords = [];      // Store all fetched records for client-side sorting
+let filteredRecords = []; // Store filtered and sorted records
+let virtualScroll = null; // Virtual scroll manager instance
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -63,7 +65,7 @@ async function fetchRecords() {
 }
 
 /**
- * Apply filters and sort client-side
+ * Apply filters and sort client-side with virtual scrolling
  */
 function applyFiltersAndSort() {
     // Start with all records
@@ -81,7 +83,7 @@ function applyFiltersAndSort() {
     });
 
     // Sort the filtered results
-    const sorted = [...filtered].sort((a, b) => {
+    filteredRecords = [...filtered].sort((a, b) => {
         let aVal, bVal;
 
         // Special handling for DATA column - combine DATA_RAW + ORA_RAW for timestamp sorting
@@ -100,9 +102,14 @@ function applyFiltersAndSort() {
         return currentSort.direction === 'asc' ? comparison : -comparison;
     });
 
-    // Render
-    renderRecords(sorted);
-    updateCount(sorted.length);
+    // Update virtual scroll or render directly
+    if (virtualScroll && filteredRecords.length > 0) {
+        virtualScroll.updateData(filteredRecords);
+    } else {
+        renderRecords(filteredRecords);
+    }
+
+    updateCount(filteredRecords.length);
 }
 
 /**
@@ -135,7 +142,86 @@ function createTimestamp(dataRaw, oraRaw) {
 }
 
 /**
- * Render records in table
+ * Initialize virtual scrolling
+ */
+function initVirtualScroll() {
+    const container = document.querySelector('.tbody-scroll');
+    const tbody = document.getElementById('linea-tbody');
+
+    if (!container || !tbody || filteredRecords.length === 0) return;
+
+    virtualScroll = new VirtualScrollManager({
+        container: container,
+        tbody: tbody,
+        data: filteredRecords,
+        rowHeight: 45,
+        bufferSize: 5,
+        renderRow: renderSingleRow
+    });
+}
+
+/**
+ * Render a single table row for virtual scrolling
+ */
+function renderSingleRow(record, index) {
+    const row = document.createElement('tr');
+    const hasRiparazione = record.CODICE_RIPARAZIONE && record.CODICE_RIPARAZIONE.trim();
+    const hasNC = record.NR_NIEZG && record.NR_NIEZG.trim();
+
+    // Row is clickable if it has either riparazione code or NC number
+    const isClickable = hasRiparazione || hasNC;
+    row.className = isClickable ? 'clickable-row' : '';
+
+    // Store both codice_riparazione and nr_niezg as data attributes
+    if (hasRiparazione) {
+        row.setAttribute('data-codice-riparazione', record.CODICE_RIPARAZIONE);
+    }
+    if (hasNC) {
+        row.setAttribute('data-nr-niezg', record.NR_NIEZG);
+    }
+
+    // Map TYP_UWAGI to Polish labels
+    const typLabel = mapTypUwagi(record.TYP_UWAGI || '—');
+
+    // Add yellow circle indicator for closed NC without AC records
+    const nrNiezgDisplay = record.MISSING_AC
+        ? `${escapeHtml(record.NR_NIEZG || '—')}<span style="color: #ffc107; margin-left: 0.25rem;">●</span>`
+        : escapeHtml(record.NR_NIEZG || '—');
+
+    row.innerHTML = `
+        <td>${escapeHtml(record.COMM || '—')}</td>
+        <td>${escapeHtml(record.DATA || '—')}</td>
+        <td>${escapeHtml(record.GODZ || '—')}</td>
+        <td>${nrNiezgDisplay}</td>
+        <td>${typLabel}</td>
+        <td>${escapeHtml(record.UWAGA || '—')}</td>
+        <td>${escapeHtml(record.MASZYNA || '—')}</td>
+        <td>${escapeHtml(record.KOD_DETALU || '—')}</td>
+        <td>${escapeHtml(record.NR_FORMY || '—')}</td>
+    `;
+
+    // Add click handler if clickable
+    if (isClickable) {
+        row.addEventListener('click', () => handleRowClick(row));
+    }
+
+    return row;
+}
+
+/**
+ * Handle row click event
+ */
+function handleRowClick(row) {
+    const codiceRiparazione = row.getAttribute('data-codice-riparazione');
+    const nrNiezg = row.getAttribute('data-nr-niezg');
+
+    if (codiceRiparazione || nrNiezg) {
+        openDetailsModal(codiceRiparazione, nrNiezg);
+    }
+}
+
+/**
+ * Render records in table (fallback for small datasets)
  */
 function renderRecords(records) {
     const tbody = document.getElementById('linea-tbody');
@@ -145,6 +231,15 @@ function renderRecords(records) {
         return;
     }
 
+    // For large datasets, use virtual scrolling
+    if (records.length > 100) {
+        // Clear tbody and init virtual scroll
+        tbody.innerHTML = '';
+        initVirtualScroll();
+        return;
+    }
+
+    // For small datasets, render directly (original behavior)
     tbody.innerHTML = records.map((record, index) => {
         const delay = Math.min(index * 0.03, 0.3);
         const hasRiparazione = record.CODICE_RIPARAZIONE && record.CODICE_RIPARAZIONE.trim();

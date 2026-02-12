@@ -1,13 +1,22 @@
 /**
- * Wykaz zablokowanych - JavaScript for sorting and filtering
+ * Wykaz zablokowanych - JavaScript for sorting and filtering with virtual scrolling
  * Refined Minimal Design System
  */
 
 let currentSort = { field: 'KOD_DETALU', direction: 'asc' };
 let searchFilters = {};
+let allData = [];          // All data from the table
+let filteredData = [];     // Filtered subset of data
+let virtualScroll = null;  // Virtual scroll manager instance
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Extract data from existing DOM
+    loadDataFromDOM();
+
+    // Initialize virtual scrolling
+    initVirtualScroll();
+
     // Setup column search inputs with debounced filtering
     document.querySelectorAll('.column-search').forEach(input => {
         input.addEventListener('input', debounce(() => {
@@ -20,6 +29,76 @@ document.addEventListener('DOMContentLoaded', () => {
     // Apply initial sort by KOD_DETALU ascending
     sortTable('KOD_DETALU');
 });
+
+/**
+ * Load data from existing DOM rows into memory
+ */
+function loadDataFromDOM() {
+    const tbody = document.getElementById('blocked-tbody');
+    const rows = tbody.querySelectorAll('tr[data-kod]');
+
+    allData = Array.from(rows).map(row => ({
+        kod: row.dataset.kod || '',
+        nc: row.dataset.nc || '',
+        data: row.dataset.data || '',
+        opis: row.dataset.opis || '',
+        produced: row.dataset.produced || '',
+        opakowan: parseInt(row.dataset.opakowan) || 0,
+        ilosc: parseInt(row.dataset.ilosc) || 0
+    }));
+
+    filteredData = [...allData];
+}
+
+/**
+ * Initialize virtual scrolling
+ */
+function initVirtualScroll() {
+    const container = document.querySelector('.tbody-scroll');
+    const tbody = document.getElementById('blocked-tbody');
+
+    if (!container || !tbody) return;
+
+    virtualScroll = new VirtualScrollManager({
+        container: container,
+        tbody: tbody,
+        data: filteredData,
+        rowHeight: 45,          // Approximate row height in pixels
+        bufferSize: 5,          // Render 5 extra rows above/below viewport
+        renderRow: renderRow
+    });
+}
+
+/**
+ * Render a single table row
+ */
+function renderRow(data, index) {
+    const row = document.createElement('tr');
+    row.className = 'clickable-row';
+    row.setAttribute('data-kod', data.kod);
+    row.setAttribute('data-nc', data.nc);
+    row.setAttribute('data-data', data.data);
+    row.setAttribute('data-opis', data.opis);
+    row.setAttribute('data-produced', data.produced);
+    row.setAttribute('data-opakowan', data.opakowan);
+    row.setAttribute('data-ilosc', data.ilosc);
+    row.onclick = () => openBoxesModal(data.nc);
+
+    // Format number with space separator
+    const formatNumber = (num) => num.toLocaleString('pl-PL').replace(/,/g, ' ');
+
+    row.innerHTML = `
+        <td style="font-weight: 500;">${data.kod || '-'}</td>
+        <td>${data.nc}</td>
+        <td style="white-space: nowrap;">${data.data || '-'}</td>
+        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${data.opis}">${data.opis || '-'}</td>
+        <td style="white-space: nowrap; font-size: 0.75rem;">${data.produced}</td>
+        <td style="text-align: right; font-weight: 500; padding-right: 1.5rem;">${data.opakowan}</td>
+        <td style="text-align: right; font-weight: 500; color: #991b1b; padding-right: 1.5rem;">${formatNumber(data.ilosc)}</td>
+    `;
+
+    return row;
+}
 
 /**
  * Debounce function to limit how often a function is called
@@ -37,21 +116,15 @@ function debounce(func, wait) {
 }
 
 /**
- * Apply search filters to table rows
+ * Apply search filters to data array
  */
 function applyFilters() {
-    const tbody = document.getElementById('blocked-tbody');
-    const rows = tbody.querySelectorAll('tr[data-kod]');
-    let visibleCount = 0;
-    let totalBlocked = 0;
-
-    rows.forEach(row => {
-        let visible = true;
-
+    // Filter data array
+    filteredData = allData.filter(item => {
         // Check each active filter
         for (const [column, searchValue] of Object.entries(searchFilters)) {
             if (searchValue) {
-                // Map column names to data attributes
+                // Map column names to data properties
                 const attrMap = {
                     'KOD_DETALU': 'kod',
                     'NR_NIEZG': 'nc',
@@ -59,25 +132,32 @@ function applyFilters() {
                     'OPIS_NIEZG': 'opis'
                 };
                 const attr = attrMap[column];
-                const cellValue = (row.dataset[attr] || '').toLowerCase();
+                const cellValue = (item[attr] || '').toLowerCase();
                 const search = searchValue.toLowerCase();
 
                 if (!cellValue.includes(search)) {
-                    visible = false;
-                    break;
+                    return false;
                 }
             }
         }
-
-        row.style.display = visible ? '' : 'none';
-        if (visible) {
-            visibleCount++;
-            totalBlocked += parseInt(row.dataset.ilosc) || 0;
-        }
+        return true;
     });
+
+    // Apply current sort to filtered data
+    sortFilteredData();
+
+    // Update virtual scroll with filtered data
+    if (virtualScroll) {
+        virtualScroll.updateData(filteredData);
+    }
+
+    // Calculate totals
+    const visibleCount = filteredData.length;
+    const totalBlocked = filteredData.reduce((sum, item) => sum + item.ilosc, 0);
 
     // Update row count
     document.getElementById('visible-count').textContent = visibleCount;
+    document.getElementById('total-count').textContent = allData.length;
     document.getElementById('row-count').textContent = `${visibleCount} pozycji`;
 
     // Check if any filters are active
@@ -101,9 +181,6 @@ function applyFilters() {
  * Sort table by column
  */
 function sortTable(field) {
-    const tbody = document.getElementById('blocked-tbody');
-    const rows = Array.from(tbody.querySelectorAll('tr[data-kod]'));
-
     // Toggle sort direction if same field, otherwise default to ascending
     if (currentSort.field === field) {
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -115,42 +192,53 @@ function sortTable(field) {
     // Update sort icons
     updateSortIcons(field);
 
-    // Sort rows
-    rows.sort((a, b) => {
-        let aVal, bVal;
+    // Sort filtered data and update virtual scroll
+    sortFilteredData();
 
-        // Map field names to data attributes
-        const attrMap = {
-            'KOD_DETALU': 'kod',
-            'NR_NIEZG': 'nc',
-            'DATA_NIEZG': 'data',
-            'OPIS_NIEZG': 'opis',
-            'PRODUCED': 'produced',
-            'ILOSC_OPAKOWAN': 'opakowan',
-            'ILOSC_ZABL': 'ilosc'
-        };
-        const attr = attrMap[field];
+    if (virtualScroll) {
+        virtualScroll.updateData(filteredData);
+    }
+}
+
+/**
+ * Sort the filtered data array based on current sort settings
+ */
+function sortFilteredData() {
+    const field = currentSort.field;
+    const direction = currentSort.direction;
+
+    // Map field names to data properties
+    const attrMap = {
+        'KOD_DETALU': 'kod',
+        'NR_NIEZG': 'nc',
+        'DATA_NIEZG': 'data',
+        'OPIS_NIEZG': 'opis',
+        'PRODUCED': 'produced',
+        'ILOSC_OPAKOWAN': 'opakowan',
+        'ILOSC_ZABL': 'ilosc'
+    };
+    const attr = attrMap[field];
+
+    filteredData.sort((a, b) => {
+        let aVal, bVal;
 
         // Get values based on field type
         if (field === 'ILOSC_ZABL' || field === 'ILOSC_OPAKOWAN') {
             // Numeric sorting
-            aVal = parseInt(a.dataset[attr]) || 0;
-            bVal = parseInt(b.dataset[attr]) || 0;
+            aVal = a[attr] || 0;
+            bVal = b[attr] || 0;
 
-            return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+            return direction === 'asc' ? aVal - bVal : bVal - aVal;
         } else {
             // String sorting
-            aVal = (a.dataset[attr] || '').toLowerCase();
-            bVal = (b.dataset[attr] || '').toLowerCase();
+            aVal = (a[attr] || '').toLowerCase();
+            bVal = (b[attr] || '').toLowerCase();
 
-            if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
-            if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
             return 0;
         }
     });
-
-    // Reorder rows in DOM
-    rows.forEach(row => tbody.appendChild(row));
 }
 
 /**
@@ -197,8 +285,26 @@ function clearAllFilters() {
     // Clear filters object
     searchFilters = {};
 
-    // Reapply filters (will show all rows)
-    applyFilters();
+    // Reset filtered data to all data
+    filteredData = [...allData];
+
+    // Reapply sorting and update virtual scroll
+    sortFilteredData();
+
+    if (virtualScroll) {
+        virtualScroll.updateData(filteredData);
+    }
+
+    // Update counts
+    document.getElementById('visible-count').textContent = filteredData.length;
+    document.getElementById('total-count').textContent = allData.length;
+    document.getElementById('row-count').textContent = `${filteredData.length} pozycji`;
+
+    // Hide filtered sum box
+    const filteredSumBox = document.getElementById('filtered-sum-box');
+    if (filteredSumBox) {
+        filteredSumBox.style.display = 'none';
+    }
 
     // Hide clear button
     updateClearFiltersButton();
