@@ -31,8 +31,8 @@ def combine_notes(row):
     return ' '.join(notes)
 
 
-def get_linea_records(start_date, end_date, search_filters=None, sort_field='DATA', sort_dir='desc'):
-    """Fetch LINEA records with optional filtering and sorting."""
+def get_linea_records(start_date, end_date, search_filters=None, sort_field='DATA', sort_dir='desc', limit=None, offset=None):
+    """Fetch LINEA records with optional filtering, sorting, and pagination."""
 
     # Base query - join NOTCOJAN with COLLAUDO
     query = '''
@@ -144,7 +144,24 @@ def get_linea_records(start_date, end_date, search_filters=None, sort_field='DAT
             search_formy = search_filters['NR_FORMY'].lower()
             records = [r for r in records if search_formy in r['NR_FORMY'].lower()]
 
-    return records
+    # Get total count before pagination
+    total_count = len(records)
+
+    # Apply pagination if limit/offset provided
+    if limit is not None and offset is not None:
+        records = records[offset:offset + limit]
+
+    # Return dict with records and pagination info
+    if limit is not None:
+        return {
+            'records': records,
+            'total': total_count,
+            'limit': limit,
+            'offset': offset
+        }
+    else:
+        # Backward compatibility: return just records if no pagination
+        return records
 
 
 @linea_bp.route('/')
@@ -188,7 +205,7 @@ def index():
 
 @linea_bp.route('/api/search')
 def search_records():
-    """AJAX endpoint for searching and filtering records."""
+    """AJAX endpoint for searching and filtering records with pagination."""
     # Get date range parameters
     days = request.args.get('days', 30, type=int)
     date_from = request.args.get('date_from')
@@ -212,6 +229,10 @@ def search_records():
     sort_field = request.args.get('sort', 'DATA')
     sort_dir = request.args.get('dir', 'desc')
 
+    # Get pagination parameters
+    limit = request.args.get('limit', 100, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
     # Calculate date range
     if date_from and date_to:
         start_date = date_from.replace('-', '')
@@ -220,14 +241,20 @@ def search_records():
         end_date = date.today().strftime("%Y%m%d")
         start_date = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
 
-    # Get records
+    # Get records with pagination
     try:
-        records = get_linea_records(start_date, end_date, search_filters, sort_field, sort_dir)
+        result = get_linea_records(start_date, end_date, search_filters, sort_field, sort_dir, limit, offset)
 
         return jsonify({
             'success': True,
-            'records': records,
-            'total': len(records)
+            'records': result['records'],
+            'pagination': {
+                'total': result['total'],
+                'limit': result['limit'],
+                'offset': result['offset'],
+                'loaded': len(result['records']),
+                'has_more': result['offset'] + result['limit'] < result['total']
+            }
         })
     except Exception as e:
         print(f"Error in search: {e}")
@@ -235,7 +262,7 @@ def search_records():
             'success': False,
             'error': str(e),
             'records': [],
-            'total': 0
+            'pagination': {'total': 0, 'limit': limit, 'offset': 0, 'loaded': 0, 'has_more': False}
         }), 500
 
 
