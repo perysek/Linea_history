@@ -161,11 +161,12 @@ async function fetchRecords(resetOffset = true) {
             // Append or replace records
             if (resetOffset) {
                 allRecords = data.records;
+                renderRecordsDirect(allRecords);
             } else {
+                appendRecordsDirect(data.records);
                 allRecords = allRecords.concat(data.records);
             }
 
-            renderRecordsDirect(allRecords);
             updateCount(allRecords.length, totalRecords);
             updateLoadMoreButton(data.pagination);
             console.log(`Loaded ${data.pagination.loaded} records (${currentOffset}-${currentOffset + data.pagination.loaded} of ${totalRecords})`);
@@ -208,54 +209,73 @@ function handleRowClick(row) {
 }
 
 /**
- * Render records directly
+ * Build HTML string for a single record row
+ */
+function buildRowHtml(record, animationDelay = 0) {
+    const hasRiparazione = record.CODICE_RIPARAZIONE && record.CODICE_RIPARAZIONE.trim();
+    const hasNC = record.NR_NIEZG && record.NR_NIEZG.trim();
+    const isClickable = hasRiparazione || hasNC;
+    const rowClass = isClickable ? 'stagger-row clickable-row' : 'stagger-row';
+
+    let dataAttrs = '';
+    if (hasRiparazione) {
+        dataAttrs += `data-codice-riparazione="${escapeHtml(record.CODICE_RIPARAZIONE)}" `;
+    }
+    if (hasNC) {
+        dataAttrs += `data-nr-niezg="${escapeHtml(record.NR_NIEZG)}" `;
+    }
+
+    const typLabel = mapTypUwagi(record.TYP_UWAGI || '—');
+    const nrNiezgDisplay = record.MISSING_AC
+        ? `${escapeHtml(record.NR_NIEZG || '—')}<span style="color: #ffc107; margin-left: 0.25rem;">●</span>`
+        : escapeHtml(record.NR_NIEZG || '—');
+
+    return `
+        <tr class="${rowClass}" style="animation-delay: ${animationDelay}s" ${dataAttrs}>
+            <td>${escapeHtml(record.COMM || '—')}</td>
+            <td>${escapeHtml(record.DATA || '—')}</td>
+            <td>${escapeHtml(record.GODZ || '—')}</td>
+            <td>${nrNiezgDisplay}</td>
+            <td>${typLabel}</td>
+            <td>${escapeHtml(record.UWAGA || '—')}</td>
+            <td>${escapeHtml(record.MASZYNA || '—')}</td>
+            <td>${escapeHtml(record.KOD_DETALU || '—')}</td>
+            <td>${escapeHtml(record.NR_FORMY || '—')}</td>
+        </tr>
+    `;
+}
+
+/**
+ * Render records directly — replaces entire tbody (used on initial load / sort / filter)
  */
 function renderRecordsDirect(records) {
     const tbody = document.getElementById('linea-tbody');
 
-    tbody.innerHTML = records.map((record, index) => {
-        const delay = Math.min(index * 0.03, 0.3);
-        const hasRiparazione = record.CODICE_RIPARAZIONE && record.CODICE_RIPARAZIONE.trim();
-        const hasNC = record.NR_NIEZG && record.NR_NIEZG.trim();
+    tbody.innerHTML = records.map((record, index) =>
+        buildRowHtml(record, Math.min(index * 0.03, 0.3))
+    ).join('');
 
-        // Row is clickable if it has either riparazione code or NC number
-        const isClickable = hasRiparazione || hasNC;
-        const rowClass = isClickable ? 'stagger-row clickable-row' : 'stagger-row';
+    tbody.querySelectorAll('.clickable-row').forEach(row => {
+        row.addEventListener('click', () => handleRowClick(row));
+    });
+}
 
-        // Store both codice_riparazione and nr_niezg as data attributes
-        let dataAttrs = '';
-        if (hasRiparazione) {
-            dataAttrs += `data-codice-riparazione="${escapeHtml(record.CODICE_RIPARAZIONE)}" `;
-        }
-        if (hasNC) {
-            dataAttrs += `data-nr-niezg="${escapeHtml(record.NR_NIEZG)}" `;
-        }
+/**
+ * Append new records to tbody — avoids re-rendering existing rows
+ */
+function appendRecordsDirect(records) {
+    const tbody = document.getElementById('linea-tbody');
 
-        // Map TYP_UWAGI to Polish labels
-        const typLabel = mapTypUwagi(record.TYP_UWAGI || '—');
+    const html = records.map((record, index) =>
+        buildRowHtml(record, Math.min(index * 0.03, 0.3))
+    ).join('');
 
-        // Add yellow circle indicator for closed NC without AC records
-        const nrNiezgDisplay = record.MISSING_AC
-            ? `${escapeHtml(record.NR_NIEZG || '—')}<span style="color: #ffc107; margin-left: 0.25rem;">●</span>`
-            : escapeHtml(record.NR_NIEZG || '—');
+    tbody.insertAdjacentHTML('beforeend', html);
 
-        return `
-            <tr class="${rowClass}" style="animation-delay: ${delay}s" ${dataAttrs}>
-                <td>${escapeHtml(record.COMM || '—')}</td>
-                <td>${escapeHtml(record.DATA || '—')}</td>
-                <td>${escapeHtml(record.GODZ || '—')}</td>
-                <td>${nrNiezgDisplay}</td>
-                <td>${typLabel}</td>
-                <td>${escapeHtml(record.UWAGA || '—')}</td>
-                <td>${escapeHtml(record.MASZYNA || '—')}</td>
-                <td>${escapeHtml(record.KOD_DETALU || '—')}</td>
-                <td>${escapeHtml(record.NR_FORMY || '—')}</td>
-            </tr>
-        `;
-    }).join('');
-
-    // Add click handlers to clickable rows
-    document.querySelectorAll('.clickable-row').forEach(row => {
+    // Attach click handlers only to the newly added rows
+    const allRows = tbody.querySelectorAll('.clickable-row');
+    const newRows = Array.from(allRows).slice(-records.length);
+    newRows.forEach(row => {
         row.addEventListener('click', () => handleRowClick(row));
     });
 }
