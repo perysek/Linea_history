@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %}/
 
 {% block title %}Dane z selekcji - LINEA{% endblock %}
 
@@ -119,43 +119,64 @@
     <div class="filters-container" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="filter-pills">
             <a href="{{ url_for('placeholder.dane_selekcji', preset='last_week') }}"
-               class="filter-pill {% if preset == 'last_week' %}active{% endif %}">Ostatni tydzień</a>
+               class="filter-pill {% if preset == 'last_week' %}active{% endif %}">Ostatnie 7dni</a>
             <a href="{{ url_for('placeholder.dane_selekcji', preset='last_month') }}"
-               class="filter-pill {% if preset == 'last_month' %}active{% endif %}">Ostatni miesiąc</a>
-            <a href="{{ url_for('placeholder.dane_selekcji', preset='this_month') }}"
-               class="filter-pill {% if preset == 'this_month' %}active{% endif %}">Ten miesiąc</a>
-            <a href="{{ url_for('placeholder.dane_selekcji', preset='previous_month') }}"
-               class="filter-pill {% if preset == 'previous_month' %}active{% endif %}">Poprzedni miesiąc</a>
-            <a href="{{ url_for('placeholder.dane_selekcji', preset='last_quarter') }}"
-               class="filter-pill {% if preset == 'last_quarter' %}active{% endif %}">Ostatni kwartał</a>
+               class="filter-pill {% if preset == 'last_month' %}active{% endif %}">Ostatnie 30dni</a>
             <a href="{{ url_for('placeholder.dane_selekcji', preset='this_year') }}"
                class="filter-pill {% if preset == 'this_year' %}active{% endif %}">Ten rok</a>
+            <a href="{{ url_for('placeholder.dane_selekcji', preset='previous_year') }}"
+               class="filter-pill {% if preset == 'previous_year' %}active{% endif %}">Poprzedni rok</a>
             <a href="{{ url_for('placeholder.dane_selekcji', preset='all') }}"
                class="filter-pill {% if preset == 'all' %}active{% endif %}">Wszystko</a>
         </div>
 
-        <!-- Refresh Excel Data Button -->
-        <button type="button"
-                id="btn-refresh-excel"
-                class="btn-refresh-excel"
-                onclick="refreshExcelData()"
-                style="padding: 0.5rem 1rem;
-                       background: var(--color-accent);
-                       color: white;
-                       border: none;
-                       border-radius: 6px;
-                       font-size: 0.875rem;
-                       font-weight: 500;
-                       cursor: pointer;
-                       display: inline-flex;
-                       align-items: center;
-                       gap: 0.5rem;
-                       transition: background 0.2s;">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="animation: none;">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span>Odśwież dane</span>
-        </button>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <!-- Month Navigation -->
+            <div id="month-nav" style="display: flex; align-items: center; gap: 0.2rem; padding: 0.125rem; border-radius: 6px; transition: background 0.2s;">
+	            <button id="btn-this-month" onclick="goToCurrentMonth()"
+                        style="display: none; padding: 0.25rem 0.5rem; background: white; border: 1px solid var(--color-border); border-radius: 4px; font-size: 0.8125rem; font-weight: 500; cursor: pointer; align-items: center; color: var(--color-ink); transition: background 0.15s; margin-left: 0.125rem;">
+                    Ten miesiąc
+                </button>
+                <button id="btn-prev-month" onclick="navigateMonth(-1)"
+                        style="padding: 0.4rem 0.4rem; background: white; border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; line-height: 1; transition: background 0.15s; color: var(--color-ink);">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span id="month-label"
+                      style="padding: 0.25rem 0.625rem; font-size: 1rem; font-weight: 500; min-width: 5.5rem; text-align: center; cursor: pointer; border-radius: 4px; border: 1px solid transparent; transition: all 0.15s; user-select: none; color: var(--color-ink);"
+                      onclick="activateMonthNav()"></span>
+                <button id="btn-next-month" onclick="navigateMonth(1)"
+                        style="padding: 0.4rem 0.4rem; background: white; border: 1px solid var(--color-border); border-radius: 2px; cursor: pointer; display: inline-flex; align-items: center; line-height: 1; transition: background 0.35s; color: var(--color-ink);">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Refresh Excel Data Button -->
+            <button type="button"
+                    id="btn-refresh-excel"
+                    class="btn-refresh-excel"
+                    onclick="refreshExcelData()"
+                    style="padding: 0.5rem 1rem;
+                           background: var(--color-accent);
+                           color: white;
+                           border: none;
+                           border-radius: 6px;
+                           font-size: 0.875rem;
+                           font-weight: 500;
+                           cursor: pointer;
+                           display: inline-flex;
+                           align-items: center;
+                           gap: 0.5rem;
+                           transition: background 0.2s;">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="animation: none;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Odśwież dane</span>
+            </button>
+        </div>
     </div>
 
     <!-- Table Container -->
@@ -416,6 +437,12 @@ let currentOffset = 0;
 const RECORDS_PER_PAGE = 100;
 let hasMoreRecords = false;
 
+// Month navigation state
+const MONTHS_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+let monthNavActive = false;
+let navYear = new Date().getFullYear();
+let navMonthNum = new Date().getMonth() + 1; // 1-12
+
 // Format number with spaces as thousand separator
 function formatNumber(num) {
     return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -478,11 +505,8 @@ function updateTable(reports, sortBy, order) {
                     <td style="font-size: 1rem;">${report.nr_instrukcji}</td>
                     <td style="text-align: center; font-size: 0.8125rem;">
                         ${report.selekcja_na_biezaco
-                            ? '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color:
-                            #166534; border-radius: 1px; font-size: 0.8125rem; font-weight: 500;">Tak</span>'
-                            : '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: var
-                            (--color-border-subtle); color: var(--color-ink-muted); border-radius: 1px; font-size: 0.8125rem;
-                            font-weight: 500;">Nie</span>'
+                            ? '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color: #166534; border-radius: 1px; font-size: 0.8125rem; font-weight: 500;">Tak</span>'
+                            : '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 1px; font-size: 0.8125rem; font-weight: 500;">Nie</span>'
                         }
                     </td>
                     <td style="text-align: right; font-weight: 500; font-size: 1rem;">${formatNumber(report
@@ -550,6 +574,79 @@ function updateSortIndicators(sortBy, order) {
     }
 }
 
+// Format a Date object to YYYY-MM-DD
+function formatDateISO(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+// True when navYear/navMonthNum equals today's calendar month
+function isCurrentMonth() {
+    const now = new Date();
+    return navYear === now.getFullYear() && navMonthNum === (now.getMonth() + 1);
+}
+
+// Sync all month navigation UI elements to current state
+function updateMonthNavUI() {
+    const label = document.getElementById('month-label');
+    const btnNext = document.getElementById('btn-next-month');
+    const btnThisMonth = document.getElementById('btn-this-month');
+    const monthNav = document.getElementById('month-nav');
+    if (!label) return;
+
+    label.textContent = `${MONTHS_PL[navMonthNum - 1]} ${navYear}`;
+
+    const isCurrent = isCurrentMonth();
+    btnNext.disabled = isCurrent;
+    btnNext.style.opacity = isCurrent ? '0.35' : '1';
+    btnNext.style.cursor = isCurrent ? 'not-allowed' : 'pointer';
+    btnThisMonth.style.display = isCurrent ? 'none' : 'inline-flex';
+
+    if (monthNavActive) {
+        monthNav.style.background = '#eff6ff';
+        label.style.borderColor = '#3b82f6';
+        label.style.color = '#2563eb';
+    } else {
+        monthNav.style.background = 'transparent';
+        label.style.borderColor = 'transparent';
+        label.style.color = 'var(--color-ink)';
+    }
+}
+
+// Move month nav one month forward or backward and activate it
+function navigateMonth(delta) {
+    navMonthNum += delta;
+    if (navMonthNum > 12) { navMonthNum = 1; navYear++; }
+    else if (navMonthNum < 1) { navMonthNum = 12; navYear--; }
+    monthNavActive = true;
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    updateMonthNavUI();
+    fetchData(true);
+}
+
+// Jump to today's calendar month and activate month nav
+function goToCurrentMonth() {
+    const now = new Date();
+    navYear = now.getFullYear();
+    navMonthNum = now.getMonth() + 1;
+    monthNavActive = true;
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    updateMonthNavUI();
+    fetchData(true);
+}
+
+// Activate month nav by clicking the label (when nav is currently inactive)
+function activateMonthNav() {
+    if (!monthNavActive) {
+        monthNavActive = true;
+        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        updateMonthNavUI();
+        fetchData(true);
+    }
+}
+
 // Fetch data from API
 async function fetchData(resetOffset = true) {
     // Cancel any existing request
@@ -580,8 +677,15 @@ async function fetchData(resetOffset = true) {
     params.set('sort', currentSort);
     params.set('order', currentOrder);
 
-    // Add preset
-    params.set('preset', currentPreset);
+    // Month nav overrides preset: send explicit date window for the selected month
+    if (monthNavActive) {
+        const firstDay = new Date(navYear, navMonthNum - 1, 1);
+        const lastDay = new Date(navYear, navMonthNum, 0); // day 0 = last day of previous month
+        params.set('date_from', formatDateISO(firstDay));
+        params.set('date_to', formatDateISO(lastDay));
+    } else {
+        params.set('preset', currentPreset);
+    }
 
     // Add pagination
     params.set('limit', RECORDS_PER_PAGE);
@@ -688,6 +792,8 @@ function loadMore() {
 // Change preset (AJAX version)
 function changePreset(preset) {
     currentPreset = preset;
+    monthNavActive = false;
+    updateMonthNavUI();
 
     // Update active pill
     document.querySelectorAll('.filter-pill').forEach(pill => {
@@ -786,6 +892,9 @@ function debounce(func, wait) {
 
 // Handle search inputs
 document.addEventListener('DOMContentLoaded', function() {
+    // Set initial month label and button states
+    updateMonthNavUI();
+
     // Infinite scroll on table body
     const tbodyScroll = document.querySelector('.tbody-scroll');
     if (tbodyScroll) {
