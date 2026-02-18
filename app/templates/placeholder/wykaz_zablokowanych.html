@@ -13,26 +13,20 @@
         <h1 class="page-title">Wykaz zablokowanych detali</h1>
     </header>
 
-    {% if parts is none %}
-    <!-- MOSYS connection error -->
-    <div style="background: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 2rem; text-align: center; margin-bottom: 1rem;">
-        <svg style="width: 48px; height: 48px; margin: 0 auto 1rem; color: #c33;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-        </svg>
-        <p style="font-size: 1.125rem; font-weight: 600; color: #c33; margin-bottom: 0.5rem;">Brak połączenia z MOSYS</p>
-        <p style="font-size: 0.875rem; color: #a33;">Nie udało się pobrać danych o zablokowanych detalach. Sprawdź połączenie z bazą MOSYS.</p>
-    </div>
-    {% else %}
     <!-- Combined Filter Pills and Summary -->
     <div class="filters-container">
         <!-- Summary Pills -->
         <div class="filter-pills">
-            <span class="filter-pill active" id="row-count">{{ parts|length }} pozycji</span>
-            <span class="filter-pill" style="background: #fee2e2; color: #991b1b; border-color: #fecaca;">{{ "{:,.0f}".format(total_blocked).replace(',', ' ') }} szt. zablokowanych</span>
+            <span class="filter-pill active" id="row-count">0 pozycji</span>
+            <span class="filter-pill" id="total-blocked-pill"
+                  style="background: #fee2e2; color: #991b1b; border-color: #fecaca;">
+                0 szt. zablokowanych
+            </span>
         </div>
 
         <!-- Clear Filters Button -->
-        <button type="button" class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" style="display: none;">
+        <button type="button" class="btn-clear-filters" id="btn-clear-filters"
+                onclick="clearAllFilters()" style="display: none;">
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -47,12 +41,12 @@
             <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
                     <col style="width: 12%;">  <!-- KOD_DETALU -->
-	                <col style="width: 10%;">  <!-- NR_NIEZG -->
-	                <col style="width: 9%;">   <!-- DATA_NIEZG -->
-	                <col style="width: 40%;">  <!-- OPIS_NIEZG -->
-	                <col style="width: 12%;">  <!-- PRODUCED -->
-	                <col style="width: 8%;">  <!-- ILOSC_OPAKOWAN -->
-	                <col style="width: 9%;">  <!-- ILOSC_ZABL -->
+                    <col style="width: 10%;">  <!-- NR_NIEZG -->
+                    <col style="width: 9%;">   <!-- DATA_NIEZG -->
+                    <col style="width: 40%;">  <!-- OPIS_NIEZG -->
+                    <col style="width: 12%;">  <!-- PRODUCED -->
+                    <col style="width: 8%;">   <!-- ILOSC_OPAKOWAN -->
+                    <col style="width: 9%;">   <!-- ILOSC_ZABL -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -109,8 +103,7 @@
                         </th>
                         <th class="sortable">
                             <div class="th-content">
-                                <div class="th-header" onclick="sortTable('ILOSC_OPAKOWAN')"
-                                     style="cursor: pointer;">
+                                <div class="th-header" onclick="sortTable('ILOSC_OPAKOWAN')" style="cursor: pointer;">
                                     <span style="text-align: right;">opakowań</span>
                                     <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
@@ -120,15 +113,19 @@
                         </th>
                         <th class="sortable">
                             <div class="th-content">
-                                <div class="th-header" onclick="sortTable('ILOSC_ZABL')"
-                                     style="cursor: pointer;">
+                                <div class="th-header" onclick="sortTable('ILOSC_ZABL')" style="cursor: pointer;">
                                     <span style="text-align: right;">sztuk</span>
                                     <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                                     </svg>
                                 </div>
-                                <div id="filtered-sum-box" style="display: none; padding: 0.25rem 0.5rem; background: #eeeeee; border-radius: 2px; text-align: right; font-size: 0.6875rem; font-weight: 500; color: #525252; text-transform: none; letter-spacing: normal;">
-                                    Suma filtry: <span id="total-blocked-qty" style="color: #991b1b; font-weight: 600;">{{ "{:,.0f}".format(total_blocked).replace(',', ' ') }}</span> szt.
+                                <div id="filtered-sum-box"
+                                     style="display: none; padding: 0.25rem 0.5rem; background: #eeeeee;
+                                            border-radius: 2px; text-align: right; font-size: 0.6875rem;
+                                            font-weight: 500; color: #525252; text-transform: none;
+                                            letter-spacing: normal;">
+                                    Suma filtry:
+                                    <span id="total-blocked-qty" style="color: #991b1b; font-weight: 600;">0</span> szt.
                                 </div>
                             </div>
                         </th>
@@ -140,44 +137,20 @@
             <div class="tbody-scroll">
                 <table class="refined-table">
                     <colgroup>
-		                <col style="width: 12%;">  <!-- KOD_DETALU -->
-		                <col style="width: 10%;">  <!-- NR_NIEZG -->
-		                <col style="width: 9%;">   <!-- DATA_NIEZG -->
-		                <col style="width: 40%;">  <!-- OPIS_NIEZG -->
-		                <col style="width: 12%;">  <!-- PRODUCED -->
-		                <col style="width: 8%;">  <!-- ILOSC_OPAKOWAN -->
-		                <col style="width: 9%;">  <!-- ILOSC_ZABL -->
+                        <col style="width: 12%;">  <!-- KOD_DETALU -->
+                        <col style="width: 10%;">  <!-- NR_NIEZG -->
+                        <col style="width: 9%;">   <!-- DATA_NIEZG -->
+                        <col style="width: 40%;">  <!-- OPIS_NIEZG -->
+                        <col style="width: 12%;">  <!-- PRODUCED -->
+                        <col style="width: 8%;">   <!-- ILOSC_OPAKOWAN -->
+                        <col style="width: 9%;">   <!-- ILOSC_ZABL -->
                     </colgroup>
                     <tbody id="blocked-tbody">
-                        {% for part in parts %}
-                        <tr class="clickable-row"
-                            data-kod="{{ part.kod_detalu or '' }}"
-                            data-nc="{{ part.nr_niezgodnosci or '' }}"
-                            data-data="{{ part.data_niezgodnosci or '' }}"
-                            data-opis="{{ part.opis_niezgodnosci or '' }}"
-                            data-produced="{{ part.produced or '' }}"
-                            data-opakowan="{{ part.ilosc_opakowan }}"
-                            data-ilosc="{{ part.ilosc_zablokowanych }}"
-                            onclick="openBoxesModal('{{ part.nr_niezgodnosci }}')">
-                            <td style="font-weight: 500;">{{ part.kod_detalu or '-' }}</td>
-                            <td>{{ part.nr_niezgodnosci }}</td>
-                            <td style="white-space: nowrap;">{{ part.data_niezgodnosci or '-' }}</td>
-                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ part.opis_niezgodnosci or '' }}">{{ part.opis_niezgodnosci or '-' }}</td>
-                            <td style="white-space: nowrap; font-size: 0.75rem;">{{ part.produced }}</td>
-                            <td style="text-align: right; font-weight: 500; padding-right: 1.5rem;">{{ part.ilosc_opakowan }}</td>
-                            <td style="text-align: right; font-weight: 500; color: #991b1b; padding-right: 1.5rem;">{{ part.ilosc_zablokowanych }}</td>
-                        </tr>
-                        {% else %}
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
-                                <svg style="width: 48px; height: 48px; margin: 0 auto 1rem; color: var(--color-ink-subtle);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                                </svg>
-                                <p style="font-size: 1.125rem; font-weight: 500;">Brak zablokowanych detali</p>
-                                <p style="font-size: 0.875rem;">Aktualnie żadne detale nie oczekują na sortowanie.</p>
+                            <td colspan="7" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
+                                Ładowanie...
                             </td>
                         </tr>
-                        {% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -186,8 +159,14 @@
         <!-- Pagination Bar -->
         <div class="pagination-bar">
             <span class="pagination-info">
-                Wyświetlono <span class="pagination-count" id="visible-count">{{ parts|length }}</span>
-                z <span class="pagination-count" id="total-count">{{ parts|length }}</span> rekordów
+                Wyświetlono <span class="pagination-count" id="visible-count">0</span>
+                z <span class="pagination-count" id="total-count">0</span> rekordów
+            </span>
+            <span class="scroll-loading-indicator" id="scroll-loading-indicator">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Ładowanie kolejnych rekordów...
             </span>
         </div>
     </div>
@@ -211,11 +190,9 @@
             </div>
         </div>
     </div>
-    {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/virtual_scroll.js') }}"></script>
 <script src="{{ url_for('static', filename='js/wykaz_zablokowanych.js') }}"></script>
 {% endblock %}

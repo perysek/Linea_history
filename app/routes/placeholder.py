@@ -12,34 +12,108 @@ placeholder_bp = Blueprint('placeholder', __name__)
 
 @placeholder_bp.route('/wykaz-zablokowanych')
 def wykaz_zablokowanych():
-    """Lista zablokowanych detali z MOSYS."""
+    """Lista zablokowanych detali z MOSYS — dane ładowane przez AJAX."""
+    return render_template('placeholder/wykaz_zablokowanych.html')
+
+
+def _format_blocked_parts(parts):
+    """Format date fields on blocked parts list returned from MOSYS."""
+    for part in parts:
+        if part.get('data_niezgodnosci'):
+            part['data_niezgodnosci'] = part['data_niezgodnosci'].strftime('%Y-%m-%d')
+        min_date = part.get('data_produkcji_min')
+        max_date = part.get('data_produkcji_max')
+        if min_date and max_date:
+            if min_date == max_date:
+                part['produced'] = min_date.strftime('%Y/%m/%d')
+            else:
+                part['produced'] = f"{min_date.strftime('%Y/%m/%d')} - {max_date.strftime('%Y/%m/%d')}"
+        else:
+            part['produced'] = '-'
+    return parts
+
+
+@placeholder_bp.route('/api/wykaz-zablokowanych')
+def api_wykaz_zablokowanych():
+    """AJAX endpoint for blocked parts with server-side filtering, sorting and pagination."""
+    sort_field = request.args.get('sort', 'KOD_DETALU')
+    sort_dir = request.args.get('dir', 'asc')
+    limit = request.args.get('limit', 100, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    search = {
+        'KOD_DETALU': request.args.get('search_KOD_DETALU', '').lower(),
+        'NR_NIEZG':   request.args.get('search_NR_NIEZG', '').lower(),
+        'DATA_NIEZG': request.args.get('search_DATA_NIEZG', '').lower(),
+        'OPIS_NIEZG': request.args.get('search_OPIS_NIEZG', '').lower(),
+    }
+
     try:
         from MOSYS_data_functions import get_all_blocked_parts
-        parts = get_all_blocked_parts()
+        parts = _format_blocked_parts(get_all_blocked_parts())
 
-        # Format dates for display
-        for part in parts:
-            if part.get('data_niezgodnosci'):
-                part['data_niezgodnosci'] = part['data_niezgodnosci'].strftime('%Y-%m-%d')
-
-            # Format production date range
-            min_date = part.get('data_produkcji_min')
-            max_date = part.get('data_produkcji_max')
-
-            if min_date and max_date:
-                if min_date == max_date:
-                    part['produced'] = min_date.strftime('%Y/%m/%d')
-                else:
-                    part['produced'] = f"{min_date.strftime('%Y/%m/%d')} - {max_date.strftime('%Y/%m/%d')}"
-            else:
-                part['produced'] = '-'
+        # Apply text filters
+        field_map = {
+            'KOD_DETALU': 'kod_detalu',
+            'NR_NIEZG':   'nr_niezgodnosci',
+            'DATA_NIEZG': 'data_niezgodnosci',
+            'OPIS_NIEZG': 'opis_niezgodnosci',
+        }
+        for col, val in search.items():
+            if val:
+                key = field_map[col]
+                parts = [p for p in parts if val in (p.get(key) or '').lower()]
 
         total_blocked = sum(p['ilosc_zablokowanych'] for p in parts)
-        return render_template('placeholder/wykaz_zablokowanych.html', parts=parts, total_blocked=total_blocked)
+        total_count = len(parts)
+
+        # Sort
+        sort_key_map = {
+            'KOD_DETALU':    'kod_detalu',
+            'NR_NIEZG':      'nr_niezgodnosci',
+            'DATA_NIEZG':    'data_niezgodnosci',
+            'OPIS_NIEZG':    'opis_niezgodnosci',
+            'PRODUCED':      'produced',
+            'ILOSC_OPAKOWAN':'ilosc_opakowan',
+            'ILOSC_ZABL':    'ilosc_zablokowanych',
+        }
+        sort_key = sort_key_map.get(sort_field, 'kod_detalu')
+        numeric_keys = {'ilosc_opakowan', 'ilosc_zablokowanych'}
+        reverse = sort_dir == 'desc'
+
+        if sort_key in numeric_keys:
+            parts.sort(key=lambda p: p.get(sort_key) or 0, reverse=reverse)
+        else:
+            parts.sort(key=lambda p: (p.get(sort_key) or '').lower(), reverse=reverse)
+
+        # Paginate
+        page = parts[offset:offset + limit]
+
+        parts_data = [{
+            'kod':      p.get('kod_detalu') or '',
+            'nc':       p.get('nr_niezgodnosci') or '',
+            'data':     p.get('data_niezgodnosci') or '',
+            'opis':     p.get('opis_niezgodnosci') or '',
+            'produced': p.get('produced') or '-',
+            'opakowan': p.get('ilosc_opakowan') or 0,
+            'ilosc':    p.get('ilosc_zablokowanych') or 0,
+        } for p in page]
+
+        return jsonify({
+            'success': True,
+            'parts': parts_data,
+            'total_blocked': total_blocked,
+            'pagination': {
+                'total':    total_count,
+                'limit':    limit,
+                'offset':   offset,
+                'loaded':   len(parts_data),
+                'has_more': offset + limit < total_count,
+            }
+        })
     except Exception as e:
-        print(f"Error fetching blocked parts: {e}")
-        # Return None to trigger MOSYS connection error display
-        return render_template('placeholder/wykaz_zablokowanych.html', parts=None, total_blocked=0)
+        print(f"Error in api_wykaz_zablokowanych: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @placeholder_bp.route('/wykaz-zablokowanych/boxes/<nr_niezgodnosci>')

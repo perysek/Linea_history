@@ -13,12 +13,12 @@
 .refined-table .th-content {
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    gap: 0.2rem;
 }
 
 .refined-table .column-search {
-    width: 100%;
-    padding: 0.25rem 0.5rem;
+    width: calc(100% + 2px);
+    padding: 0.15rem 0.25rem;
     margin: 0;
     box-sizing: border-box;
 }
@@ -42,19 +42,19 @@
 
 /* Ensure both tables have same width */
 .table-scroll-wrapper > table {
-    width: calc(100% - 6px); /* Account for scrollbar width */
+    width: calc(100% + 0px); /* Account for scrollbar width */
     table-layout: fixed;
 }
 
 .tbody-scroll > table {
-    width: 100%;
+    width: calc(100% + 6px);
     table-layout: fixed;
 }
 
 /* Refresh Excel button styles */
 .btn-refresh-excel:hover:not(:disabled) {
     background: #0056b3 !important;
-    transform: translateY(-1px);
+    transform: translateY(-1px);`
     box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
 }
 
@@ -62,15 +62,7 @@
     transform: translateY(0);
 }
 
-/* Spin animation for refresh icon */
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
-}
+/* Spin animation for refresh icon is defined in linea.css */
 </style>
 {% endblock %}
 
@@ -83,34 +75,43 @@
 
     <!-- Stats Cards -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
-        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Raportów</div>
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 1rem;">
+            <div
+		            style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Raportów z selekcji</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ stats.count }}</div>
         </div>
 
-        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Detali</div>
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 1rem;">
+            <div
+		            style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Sztuk sprawdzonych</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "{:,.0f}".format(stats.parts_checked).replace(',', ' ') }}</div>
         </div>
 
-        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Braków</div>
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 1rem;">
+            <div
+		            style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Sztuk brakowanych</div>
             <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "{:,.0f}".format(stats.total_defects).replace(',', ' ') }}</div>
         </div>
 
-        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Brakowość</div>
-            <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.2f"|format(stats.average_scrap_rate) }}%</div>
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 1rem;">
+            <div
+		            style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Średnia Brakowość</div>
+            <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{
+	            "%.1f"|format(stats.average_scrap_rate) }}%</div>
         </div>
 
-        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Wydajność</div>
-            <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.0f"|format(stats.average_productivity) }}</div>
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 1rem;">
+            <div
+		            style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Średnia Wydajność</div>
+            <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{
+	            "%.0f"|format(stats.average_productivity) }} szt/godz</div>
         </div>
 
-        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 1rem;">
-            <div style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Godz. pracy</div>
-            <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.1f"|format(stats.hours_worked) }}</div>
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 1rem;">
+            <div
+		            style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 0.25rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">Godzin selekcji</div>
+            <div style="font-size: 1.5rem; font-weight: 600; color: var(--color-ink);">{{ "%.0f"|format(stats.hours_worked)
+	            }}</div>
         </div>
     </div>
 
@@ -168,14 +169,14 @@
                     <col style="width: 5.5%;">  <!-- RAPORT -->
                     <col style="width: 8.2%;">  <!-- NR NC -->
                     <col style="width: 7.3%;">  <!-- DATA NC -->
-                    <col style="width: 4.6%;">  <!-- ZAM -->
+                    <col style="width: 5.6%;">  <!-- ZAM -->
                     <col style="width: 10.6%;">  <!-- KOD DETALU -->
-                    <col style="width: 9.1%;">  <!-- INSTRUKCJA -->
+                    <col style="width: 8.1%;">  <!-- INSTRUKCJA -->
                     <col style="width: 5.5%;">  <!-- ONLINE -->
                     <col style="width: 4.6%;">  <!-- ILOŚĆ -->
                     <col style="width: 2.7%;">  <!-- NOK -->
-                    <col style="width: 12.6%;">  <!-- WADY -->
-                    <col style="width: 6.4%;">  <!-- BRAKI % -->
+                    <col style="width: 13.6%;">  <!-- WADY -->
+                    <col style="width: 5.4%;">  <!-- BRAKI % -->
                     <col style="width: 3.7%;">  <!-- CZAS -->
                     <col style="width: 4.6%;">  <!-- szt/godz -->
                 </colgroup>
@@ -301,14 +302,14 @@
                         <col style="width: 5.5%;">  <!-- RAPORT -->
                         <col style="width: 8.2%;">  <!-- NR NC -->
                         <col style="width: 7.3%;">  <!-- DATA NC -->
-                        <col style="width: 4.6%;">  <!-- ZAM -->
+                        <col style="width: 5.6%;">  <!-- ZAM -->
                         <col style="width: 10.6%;">  <!-- KOD DETALU -->
-                        <col style="width: 9.1%;">  <!-- INSTRUKCJA -->
+                        <col style="width: 8.1%;">  <!-- INSTRUKCJA -->
                         <col style="width: 5.5%;">  <!-- ONLINE -->
                         <col style="width: 4.6%;">  <!-- ILOŚĆ -->
                         <col style="width: 2.7%;">  <!-- NOK -->
-                        <col style="width: 12.6%;">  <!-- WADY -->
-                        <col style="width: 6.4%;">  <!-- BRAKI % -->
+                        <col style="width: 13.6%;">  <!-- WADY -->
+                        <col style="width: 5.4%;">  <!-- BRAKI % -->
                         <col style="width: 3.7%;">  <!-- CZAS -->
                         <col style="width: 4.6%;">  <!-- szt/godz -->
                     </colgroup>
@@ -316,37 +317,40 @@
                     {% if reports %}
                         {% for report in reports %}
                         <tr>
-                            <td style="font-size: 0.8125rem;">{{ report.data_selekcji.strftime('%d.%m.%y') if report.data_selekcji else '-' }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.operator.dzial.opis_kategorii if report.operator and report.operator.dzial else '-' }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.nr_raportu }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.nr_niezgodnosci }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.data_niezgodnosci.strftime('%d.%m.%y') if report.data_niezgodnosci else '-' }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.nr_zamowienia or '-' }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.kod_detalu or '-' }}</td>
-                            <td style="font-size: 0.8125rem;">{{ report.nr_instrukcji or '-' }}</td>
+                            <td style="font-size: 1rem;">{{ report.data_selekcji.strftime('%d.%m.%y') if report.data_selekcji else '-' }}</td>
+                            <td style="font-size: 1rem;">{{ report.operator.dzial.opis_kategorii if report.operator and report.operator.dzial else '-' }}</td>
+                            <td style="font-size: 1rem;">{{ report.nr_raportu }}</td>
+                            <td style="font-size: 1rem;">{{ report.nr_niezgodnosci }}</td>
+                            <td style="font-size: 1rem;">{{ report.data_niezgodnosci.strftime('%d.%m.%y') if report.data_niezgodnosci else '-' }}</td>
+                            <td style="font-size: 1rem;">{{ report.nr_zamowienia or '-' }}</td>
+                            <td style="font-size: 1rem;">{{ report.kod_detalu or '-' }}</td>
+                            <td style="font-size: 1rem;">{{ report.nr_instrukcji or '-' }}</td>
                             <td style="text-align: center; font-size: 0.8125rem;">
                                 {% if report.selekcja_na_biezaco %}
-                                <span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color: #166534; border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Tak</span>
+                                <span
+		                                style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color: #166534; border-radius: 1px; font-size: 0.8125rem; font-weight: 500;">Tak</span>
                                 {% else %}
-                                <span style="display: inline-block; padding: 0.125rem 0.25rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Nie</span>
+                                <span
+		                                style="display: inline-block; padding: 0.125rem 0.25rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 1px; font-size: 0.8125rem; font-weight: 500;">Nie</span>
                                 {% endif %}
                             </td>
-                            <td style="text-align: right; font-weight: 500; font-size: 0.8125rem;">{{ "{:,.0f}".format(report.ilosc_detali_sprawdzonych).replace(',', ' ') }}</td>
-                            <td style="text-align: right; font-size: 0.8125rem;">
+                            <td style="text-align: right; font-weight: 500; font-size: 1rem;">{{
+	                            "{:,.0f}".format(report.ilosc_detali_sprawdzonych).replace(',', ' ') }}</td>
+                            <td style="text-align: right; font-size: 1rem;">
                                 {% if report.total_defects > 0 %}
                                 <span style="color: #f59e0b; font-weight: 500;">{{ report.total_defects }}</span>
                                 {% else %}
                                 <span style="color: var(--color-ink-subtle);">0</span>
                                 {% endif %}
                             </td>
-                            <td style="font-size: 0.625rem; text-align: left;">
+                            <td style="font-size: 0.815rem; text-align: left;">
                                 {% if report.braki_defekty %}
                                 {{ report.braki_defekty|map(attribute='defekt')|join(', ') }}
                                 {% else %}
                                 -
                                 {% endif %}
                             </td>
-                            <td style="text-align: right; font-size: 0.8125rem;">
+                            <td style="text-align: right; font-size: 1rem;">
                                 {% if report.ilosc_detali_sprawdzonych > 0 %}
                                     {% set scrap_percentage = (report.total_defects / report.ilosc_detali_sprawdzonych) * 100 %}
                                     {% if scrap_percentage >= 5 %}
@@ -380,26 +384,17 @@
         </div>
 
         <!-- Pagination Bar -->
-        <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="pagination-bar">
             <span class="pagination-info">
                 Wyświetlono <span class="pagination-count" id="visible-count">{{ reports|length }}</span>
                 z <span class="pagination-count" id="total-count">{{ reports|length }}</span> rekordów
             </span>
-            <button type="button"
-                    id="btn-load-more"
-                    onclick="loadMore()"
-                    style="padding: 0.5rem 1rem;
-                           background: var(--color-accent);
-                           color: white;
-                           border: none;
-                           border-radius: 6px;
-                           font-size: 0.875rem;
-                           font-weight: 500;
-                           cursor: pointer;
-                           display: none;
-                           transition: background 0.2s;">
-                Załaduj więcej
-            </button>
+            <span class="scroll-loading-indicator" id="scroll-loading-indicator">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Ładowanie kolejnych rekordów...
+            </span>
         </div>
     </div>
 </div>
@@ -419,6 +414,7 @@ let allReports = [];
 let totalRecords = 0;
 let currentOffset = 0;
 const RECORDS_PER_PAGE = 100;
+let hasMoreRecords = false;
 
 // Format number with spaces as thousand separator
 function formatNumber(num) {
@@ -472,36 +468,40 @@ function updateTable(reports, sortBy, order) {
 
             html += `
                 <tr>
-                    <td style="font-size: 0.8125rem;">${report.data_selekcji}</td>
-                    <td style="font-size: 0.8125rem;">${report.dzial}</td>
-                    <td style="font-size: 0.8125rem;">${report.nr_raportu}</td>
-                    <td style="font-size: 0.8125rem;">${report.nr_niezgodnosci}</td>
-                    <td style="font-size: 0.8125rem;">${report.data_niezgodnosci}</td>
-                    <td style="font-size: 0.8125rem;">${report.nr_zamowienia}</td>
-                    <td style="font-size: 0.8125rem;">${report.kod_detalu}</td>
-                    <td style="font-size: 0.8125rem;">${report.nr_instrukcji}</td>
+                    <td style="font-size: 1rem;">${report.data_selekcji}</td>
+                    <td style="font-size: 1rem;">${report.dzial}</td>
+                    <td style="font-size: 1rem;">${report.nr_raportu}</td>
+                    <td style="font-size: 1rem;">${report.nr_niezgodnosci}</td>
+                    <td style="font-size: 1rem;">${report.data_niezgodnosci}</td>
+                    <td style="font-size: 1rem;">${report.nr_zamowienia}</td>
+                    <td style="font-size: 1rem;">${report.kod_detalu}</td>
+                    <td style="font-size: 1rem;">${report.nr_instrukcji}</td>
                     <td style="text-align: center; font-size: 0.8125rem;">
                         ${report.selekcja_na_biezaco
-                            ? '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color: #166534; border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Tak</span>'
-                            : '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: var(--color-border-subtle); color: var(--color-ink-muted); border-radius: 999px; font-size: 0.625rem; font-weight: 500;">Nie</span>'
+                            ? '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: #dcfce7; color:
+                            #166534; border-radius: 1px; font-size: 0.8125rem; font-weight: 500;">Tak</span>'
+                            : '<span style="display: inline-block; padding: 0.125rem 0.25rem; background: var
+                            (--color-border-subtle); color: var(--color-ink-muted); border-radius: 1px; font-size: 0.8125rem;
+                            font-weight: 500;">Nie</span>'
                         }
                     </td>
-                    <td style="text-align: right; font-weight: 500; font-size: 0.8125rem;">${formatNumber(report.ilosc_detali_sprawdzonych)}</td>
-                    <td style="text-align: right; font-size: 0.8125rem;">
+                    <td style="text-align: right; font-weight: 500; font-size: 1rem;">${formatNumber(report
+                    .ilosc_detali_sprawdzonych)}</td>
+                    <td style="text-align: right; font-size: 1rem;">
                         ${report.total_defects > 0
                             ? `<span style="color: #f59e0b; font-weight: 500;">${report.total_defects}</span>`
                             : '<span style="color: var(--color-ink-subtle);">0</span>'
                         }
                     </td>
-                    <td style="font-size: 0.625rem; text-align: left;">${report.defekty}</td>
-                    <td style="text-align: right; font-size: 0.8125rem;">
+                    <td style="font-size: 1rem; text-align: left;">${report.defekty}</td>
+                    <td style="text-align: right; font-size: 1rem;">
                         ${report.ilosc_detali_sprawdzonych > 0
                             ? `<span style="color: ${scrapColor}; font-weight: ${scrapWeight};">${report.scrap_percentage.toFixed(1)}</span>`
                             : '<span style="color: var(--color-ink-subtle);">-</span>'
                         }
                     </td>
-                    <td style="text-align: right; font-size: 0.8125rem;">${report.czas_pracy.toFixed(1)}</td>
-                    <td style="text-align: right; font-size: 0.8125rem;">${Math.round(report.rzeczywista_wydajnosc)}</td>
+                    <td style="text-align: right; font-size: 1rem;">${report.czas_pracy.toFixed(1)}</td>
+                    <td style="text-align: right; font-size: 1rem;">${Math.round(report.rzeczywista_wydajnosc)}</td>
                 </tr>
             `;
         });
@@ -516,14 +516,7 @@ function updateTable(reports, sortBy, order) {
 function updatePaginationInfo(pagination) {
     document.getElementById('visible-count').textContent = allReports.length;
     document.getElementById('total-count').textContent = pagination.total;
-
-    // Show/hide Load More button
-    const loadMoreBtn = document.getElementById('btn-load-more');
-    if (pagination.has_more) {
-        loadMoreBtn.style.display = 'inline-block';
-    } else {
-        loadMoreBtn.style.display = 'none';
-    }
+    hasMoreRecords = pagination.has_more;
 }
 
 // Update sort indicators in headers
@@ -574,6 +567,12 @@ async function fetchData(resetOffset = true) {
     // Create new abort controller for this request
     currentAbortController = new AbortController();
     isLoading = true;
+
+    // Show loading indicator only for pagination loads (not initial/reset)
+    const loadingIndicator = document.getElementById('scroll-loading-indicator');
+    if (loadingIndicator && !resetOffset) {
+        loadingIndicator.style.display = 'inline-flex';
+    }
 
     const params = new URLSearchParams();
 
@@ -646,6 +645,9 @@ async function fetchData(resetOffset = true) {
     } finally {
         isLoading = false;
         currentAbortController = null;
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
     }
 }
 
@@ -676,15 +678,11 @@ function applyFilters() {
     fetchData(true);
 }
 
-// Load more records
+// Load more records (triggered by scroll)
 function loadMore() {
-    if (isLoading) {
-        console.log('Already loading data...');
-        return;
-    }
-
+    if (isLoading || !hasMoreRecords) return;
     currentOffset += RECORDS_PER_PAGE;
-    fetchData(false);  // Don't reset offset
+    fetchData(false);
 }
 
 // Change preset (AJAX version)
@@ -788,6 +786,18 @@ function debounce(func, wait) {
 
 // Handle search inputs
 document.addEventListener('DOMContentLoaded', function() {
+    // Infinite scroll on table body
+    const tbodyScroll = document.querySelector('.tbody-scroll');
+    if (tbodyScroll) {
+        tbodyScroll.addEventListener('scroll', function() {
+            if (isLoading || !hasMoreRecords) return;
+            const { scrollTop, scrollHeight, clientHeight } = tbodyScroll;
+            if (scrollTop + clientHeight >= scrollHeight - 100) {
+                loadMore();
+            }
+        });
+    }
+
     const searchInputs = document.querySelectorAll('.column-search');
 
     searchInputs.forEach(input => {

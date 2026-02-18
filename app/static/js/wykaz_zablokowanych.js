@@ -1,23 +1,38 @@
 /**
- * Wykaz zablokowanych - JavaScript for sorting and filtering with virtual scrolling
- * Refined Minimal Design System
+ * Wykaz zablokowanych - AJAX infinite scroll
+ * Matches linea.js pagination pattern.
  */
 
 let currentSort = { field: 'KOD_DETALU', direction: 'asc' };
 let searchFilters = {};
-let allData = [];          // All data from the table
-let filteredData = [];     // Filtered subset of data
-let virtualScroll = null;  // Virtual scroll manager instance
+let allParts = [];
+let isLoading = false;
+let currentAbortController = null;
+
+// Pagination state
+let currentOffset = 0;
+let totalRecords = 0;
+const PARTS_PER_PAGE = 100;
+let hasMoreRecords = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    // Extract data from existing DOM
-    loadDataFromDOM();
+    fetchParts();
 
-    // Initialize virtual scrolling
-    initVirtualScroll();
+    // Infinite scroll on table body
+    const tbodyScroll = document.querySelector('.tbody-scroll');
+    if (tbodyScroll) {
+        tbodyScroll.addEventListener('scroll', () => {
+            if (isLoading || !hasMoreRecords) return;
+            const { scrollTop, scrollHeight, clientHeight } = tbodyScroll;
+            if (scrollTop + clientHeight >= scrollHeight - 100) {
+                currentOffset += PARTS_PER_PAGE;
+                fetchParts(false);
+            }
+        });
+    }
 
-    // Setup column search inputs with debounced filtering
+    // Column search inputs with debounce
     document.querySelectorAll('.column-search').forEach(input => {
         input.addEventListener('input', debounce(() => {
             searchFilters[input.dataset.column] = input.value.trim();
@@ -25,269 +40,198 @@ document.addEventListener('DOMContentLoaded', () => {
             updateClearFiltersButton();
         }, 300));
     });
-
-    // Apply initial sort by KOD_DETALU ascending
-    sortTable('KOD_DETALU');
 });
 
 /**
- * Load data from existing DOM rows into memory
+ * Fetch blocked parts from API with current sort, filters and offset.
  */
-function loadDataFromDOM() {
-    const tbody = document.getElementById('blocked-tbody');
-    const rows = tbody.querySelectorAll('tr[data-kod]');
-
-    allData = Array.from(rows).map(row => ({
-        kod: row.dataset.kod || '',
-        nc: row.dataset.nc || '',
-        data: row.dataset.data || '',
-        opis: row.dataset.opis || '',
-        produced: row.dataset.produced || '',
-        opakowan: parseInt(row.dataset.opakowan) || 0,
-        ilosc: parseInt(row.dataset.ilosc) || 0
-    }));
-
-    filteredData = [...allData];
-}
-
-/**
- * Initialize virtual scrolling
- */
-function initVirtualScroll() {
-    const container = document.querySelector('.tbody-scroll');
-    const tbody = document.getElementById('blocked-tbody');
-
-    if (!container || !tbody) {
-        console.warn('Virtual scroll: container or tbody not found');
-        return;
+async function fetchParts(resetOffset = true) {
+    if (currentAbortController) {
+        currentAbortController.abort();
     }
 
-    if (filteredData.length === 0) {
-        console.log('Virtual scroll: no data to display');
-        return;
+    if (resetOffset) {
+        currentOffset = 0;
+        allParts = [];
     }
 
-    console.log(`Initializing virtual scroll with ${filteredData.length} rows`);
+    currentAbortController = new AbortController();
+    isLoading = true;
 
-    // Clear existing rows from tbody (keep server-rendered data in memory only)
-    tbody.innerHTML = '';
+    // Show loading indicator only for pagination loads (not initial/reset)
+    const loadingIndicator = document.getElementById('scroll-loading-indicator');
+    if (loadingIndicator && !resetOffset) {
+        loadingIndicator.style.display = 'inline-flex';
+    }
 
-    virtualScroll = new VirtualScrollManager({
-        container: container,
-        tbody: tbody,
-        data: filteredData,
-        rowHeight: 45,          // Approximate row height in pixels
-        bufferSize: 5,          // Render 5 extra rows above/below viewport
-        renderRow: renderRow
+    const tbody = document.getElementById('blocked-tbody');
+    if (resetOffset) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
+    }
+
+    const params = new URLSearchParams();
+    params.append('sort', currentSort.field);
+    params.append('dir', currentSort.direction);
+    params.append('limit', PARTS_PER_PAGE);
+    params.append('offset', currentOffset);
+
+    Object.entries(searchFilters).forEach(([key, value]) => {
+        if (value) params.append(`search_${key}`, value);
     });
 
-    console.log('Virtual scroll initialized successfully');
+    try {
+        const response = await fetch(`/api/wykaz-zablokowanych?${params}`, {
+            signal: currentAbortController.signal
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            totalRecords = data.pagination.total;
+            currentOffset = data.pagination.offset;
+            hasMoreRecords = data.pagination.has_more;
+
+            if (resetOffset) {
+                allParts = data.parts;
+            } else {
+                allParts = allParts.concat(data.parts);
+            }
+
+            renderParts(allParts);
+            updateCount(allParts.length, totalRecords, data.total_blocked);
+            updateFilteredSum(data.total_blocked);
+        } else {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych z MOSYS</td></tr>';
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('Request cancelled - new request in progress');
+        } else {
+            console.error('Error fetching blocked parts:', error);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
+                        <p style="font-size: 1rem; font-weight: 500; color: #c33; margin-bottom: 0.5rem;">Błąd połączenia z MOSYS</p>
+                        <p style="font-size: 0.875rem;">Nie udało się pobrać danych o zablokowanych detalach.</p>
+                    </td>
+                </tr>`;
+        }
+    } finally {
+        isLoading = false;
+        currentAbortController = null;
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+    }
 }
 
 /**
- * Render a single table row
+ * Render accumulated parts into tbody.
  */
-function renderRow(data, index) {
-    const row = document.createElement('tr');
-    row.className = 'clickable-row';
-    row.setAttribute('data-kod', data.kod);
-    row.setAttribute('data-nc', data.nc);
-    row.setAttribute('data-data', data.data);
-    row.setAttribute('data-opis', data.opis);
-    row.setAttribute('data-produced', data.produced);
-    row.setAttribute('data-opakowan', data.opakowan);
-    row.setAttribute('data-ilosc', data.ilosc);
-    row.onclick = () => openBoxesModal(data.nc);
+function renderParts(parts) {
+    const tbody = document.getElementById('blocked-tbody');
 
-    // Format number with space separator
+    if (parts.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
+                    <p style="font-size: 1.125rem; font-weight: 500;">Brak zablokowanych detali</p>
+                    <p style="font-size: 0.875rem;">Aktualnie żadne detale nie oczekują na sortowanie.</p>
+                </td>
+            </tr>`;
+        return;
+    }
+
     const formatNumber = (num) => num.toLocaleString('pl-PL').replace(/,/g, ' ');
 
-    row.innerHTML = `
-        <td style="font-weight: 500;">${data.kod || '-'}</td>
-        <td>${data.nc}</td>
-        <td style="white-space: nowrap;">${data.data || '-'}</td>
-        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${data.opis}">${data.opis || '-'}</td>
-        <td style="white-space: nowrap; font-size: 0.75rem;">${data.produced}</td>
-        <td style="text-align: right; font-weight: 500; padding-right: 1.5rem;">${data.opakowan}</td>
-        <td style="text-align: right; font-weight: 500; color: #991b1b; padding-right: 1.5rem;">${formatNumber(data.ilosc)}</td>
-    `;
-
-    return row;
+    tbody.innerHTML = parts.map(p => `
+        <tr class="clickable-row" onclick="openBoxesModal('${escapeHtml(p.nc)}')">
+            <td style="font-weight: 500;">${escapeHtml(p.kod) || '-'}</td>
+            <td>${escapeHtml(p.nc) || '-'}</td>
+            <td style="white-space: nowrap;">${escapeHtml(p.data) || '-'}</td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                title="${escapeHtml(p.opis)}">${escapeHtml(p.opis) || '-'}</td>
+            <td style="white-space: nowrap; font-size: 0.75rem;">${escapeHtml(p.produced)}</td>
+            <td style="text-align: right; font-weight: 500; padding-right: 1.5rem;">${p.opakowan}</td>
+            <td style="text-align: right; font-weight: 500; color: #991b1b; padding-right: 1.5rem;">${formatNumber(p.ilosc)}</td>
+        </tr>
+    `).join('');
 }
 
 /**
- * Debounce function to limit how often a function is called
- */
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-/**
- * Apply search filters to data array
+ * Apply column filters — refetch from first page.
  */
 function applyFilters() {
-    console.log('Applying filters:', searchFilters);
-
-    // Filter data array
-    filteredData = allData.filter(item => {
-        // Check each active filter
-        for (const [column, searchValue] of Object.entries(searchFilters)) {
-            if (searchValue) {
-                // Map column names to data properties
-                const attrMap = {
-                    'KOD_DETALU': 'kod',
-                    'NR_NIEZG': 'nc',
-                    'DATA_NIEZG': 'data',
-                    'OPIS_NIEZG': 'opis'
-                };
-                const attr = attrMap[column];
-                const cellValue = (item[attr] || '').toLowerCase();
-                const search = searchValue.toLowerCase();
-
-                if (!cellValue.includes(search)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    });
-
-    console.log(`Filtered: ${filteredData.length} / ${allData.length} rows`);
-
-    // Apply current sort to filtered data
-    sortFilteredData();
-
-    // Update virtual scroll with filtered data
-    if (virtualScroll) {
-        console.log('Updating virtual scroll with filtered data');
-        virtualScroll.updateData(filteredData);
-    } else {
-        console.warn('Virtual scroll not initialized!');
-    }
-
-    // Calculate totals
-    const visibleCount = filteredData.length;
-    const totalBlocked = filteredData.reduce((sum, item) => sum + item.ilosc, 0);
-
-    // Update row count
-    document.getElementById('visible-count').textContent = visibleCount;
-    document.getElementById('total-count').textContent = allData.length;
-    document.getElementById('row-count').textContent = `${visibleCount} pozycji`;
-
-    // Check if any filters are active
-    const hasActiveFilters = Object.values(searchFilters).some(val => val !== '');
-
-    // Update total blocked quantity with space as thousands separator
-    const totalQtyElement = document.getElementById('total-blocked-qty');
-    const filteredSumBox = document.getElementById('filtered-sum-box');
-
-    if (hasActiveFilters && totalQtyElement && filteredSumBox) {
-        // Show filtered sum when filters are active
-        filteredSumBox.style.display = 'block';
-        totalQtyElement.textContent = totalBlocked.toLocaleString('pl-PL').replace(/,/g, ' ');
-    } else if (filteredSumBox) {
-        // Hide filtered sum when no filters are active
-        filteredSumBox.style.display = 'none';
-    }
+    fetchParts(true);
 }
 
 /**
- * Sort table by column
+ * Sort table by column — refetch from first page.
  */
 function sortTable(field) {
-    // Toggle sort direction if same field, otherwise default to ascending
     if (currentSort.field === field) {
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
     } else {
         currentSort.field = field;
         currentSort.direction = 'asc';
     }
-
-    // Update sort icons
     updateSortIcons(field);
+    fetchParts(true);
+}
 
-    // Sort filtered data and update virtual scroll
-    sortFilteredData();
+/**
+ * Update pagination info and row-count pill.
+ */
+function updateCount(visible, total, totalBlocked) {
+    document.getElementById('visible-count').textContent = visible;
+    document.getElementById('total-count').textContent = total;
+    document.getElementById('row-count').textContent = `${total} pozycji`;
 
-    if (virtualScroll) {
-        virtualScroll.updateData(filteredData);
+    const blockedPill = document.getElementById('total-blocked-pill');
+    if (blockedPill) {
+        const fmt = (n) => n.toLocaleString('pl-PL').replace(/,/g, ' ');
+        blockedPill.textContent = `${fmt(totalBlocked)} szt. zablokowanych`;
     }
 }
 
 /**
- * Sort the filtered data array based on current sort settings
+ * Show/hide the filtered-sum-box in the table header.
  */
-function sortFilteredData() {
-    const field = currentSort.field;
-    const direction = currentSort.direction;
+function updateFilteredSum(totalBlocked) {
+    const hasActiveFilters = Object.values(searchFilters).some(v => v !== '');
+    const filteredSumBox = document.getElementById('filtered-sum-box');
+    const totalQtyEl = document.getElementById('total-blocked-qty');
 
-    // Map field names to data properties
-    const attrMap = {
-        'KOD_DETALU': 'kod',
-        'NR_NIEZG': 'nc',
-        'DATA_NIEZG': 'data',
-        'OPIS_NIEZG': 'opis',
-        'PRODUCED': 'produced',
-        'ILOSC_OPAKOWAN': 'opakowan',
-        'ILOSC_ZABL': 'ilosc'
-    };
-    const attr = attrMap[field];
+    if (!filteredSumBox) return;
 
-    filteredData.sort((a, b) => {
-        let aVal, bVal;
-
-        // Get values based on field type
-        if (field === 'ILOSC_ZABL' || field === 'ILOSC_OPAKOWAN') {
-            // Numeric sorting
-            aVal = a[attr] || 0;
-            bVal = b[attr] || 0;
-
-            return direction === 'asc' ? aVal - bVal : bVal - aVal;
-        } else {
-            // String sorting
-            aVal = (a[attr] || '').toLowerCase();
-            bVal = (b[attr] || '').toLowerCase();
-
-            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
-            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
-            return 0;
+    if (hasActiveFilters) {
+        filteredSumBox.style.display = 'block';
+        if (totalQtyEl) {
+            totalQtyEl.textContent = totalBlocked.toLocaleString('pl-PL').replace(/,/g, ' ');
         }
-    });
+    } else {
+        filteredSumBox.style.display = 'none';
+    }
 }
 
 /**
- * Update sort icon states
+ * Update sort icon states in column headers.
  */
 function updateSortIcons(activeField) {
     document.querySelectorAll('.sortable').forEach(th => {
         const sortIcon = th.querySelector('.sort-icon');
         if (!sortIcon) return;
-
-        // Extract field name from onclick attribute on th-header div
         const thHeader = th.querySelector('.th-header');
         if (!thHeader) return;
-
         const onclickAttr = thHeader.getAttribute('onclick');
         if (!onclickAttr) return;
-
-        const fieldMatch = onclickAttr.match(/sortTable\('(.+?)'\)/);
-        const field = fieldMatch ? fieldMatch[1] : null;
+        const match = onclickAttr.match(/sortTable\('(.+?)'\)/);
+        const field = match ? match[1] : null;
 
         if (field === activeField) {
-            // Active sort column
             th.classList.add('sorted');
             sortIcon.style.opacity = '1';
             sortIcon.style.transform = currentSort.direction === 'desc' ? 'rotate(180deg)' : 'rotate(0deg)';
         } else {
-            // Inactive columns
             th.classList.remove('sorted');
             sortIcon.style.opacity = '0';
             sortIcon.style.transform = 'rotate(0deg)';
@@ -296,86 +240,71 @@ function updateSortIcons(activeField) {
 }
 
 /**
- * Clear all search filters
+ * Clear all column search filters.
  */
 function clearAllFilters() {
-    // Clear all search inputs
-    document.querySelectorAll('.column-search').forEach(input => {
-        input.value = '';
-    });
-
-    // Clear filters object
+    document.querySelectorAll('.column-search').forEach(input => { input.value = ''; });
     searchFilters = {};
-
-    // Reset filtered data to all data
-    filteredData = [...allData];
-
-    // Reapply sorting and update virtual scroll
-    sortFilteredData();
-
-    if (virtualScroll) {
-        virtualScroll.updateData(filteredData);
-    }
-
-    // Update counts
-    document.getElementById('visible-count').textContent = filteredData.length;
-    document.getElementById('total-count').textContent = allData.length;
-    document.getElementById('row-count').textContent = `${filteredData.length} pozycji`;
-
-    // Hide filtered sum box
-    const filteredSumBox = document.getElementById('filtered-sum-box');
-    if (filteredSumBox) {
-        filteredSumBox.style.display = 'none';
-    }
-
-    // Hide clear button
+    applyFilters();
     updateClearFiltersButton();
 }
 
 /**
- * Show/hide the clear filters button based on active filters
+ * Show/hide the clear filters button.
  */
 function updateClearFiltersButton() {
     const clearBtn = document.getElementById('btn-clear-filters');
-    const hasActiveFilters = Object.values(searchFilters).some(val => val !== '');
-
-    if (clearBtn) {
-        clearBtn.style.display = hasActiveFilters ? 'inline-flex' : 'none';
-    }
+    const hasActive = Object.values(searchFilters).some(v => v !== '');
+    if (clearBtn) clearBtn.style.display = hasActive ? 'inline-flex' : 'none';
 }
 
 /**
- * Open boxes modal and fetch box details
+ * Escape HTML to prevent XSS.
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Debounce helper.
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => { clearTimeout(timeout); func(...args); };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+/**
+ * Open boxes modal and fetch box details.
  */
 async function openBoxesModal(ncNumber) {
     const modal = document.getElementById('boxes-modal');
     const modalBody = document.getElementById('modal-body');
     const modalNcNumber = document.getElementById('modal-nc-number');
 
-    // Set NC number in modal header
     modalNcNumber.textContent = ncNumber;
-
-    // Show modal
     modal.classList.add('active');
-
-    // Show loading state
     modalBody.innerHTML = '<div class="modal-loading">Ładowanie...</div>';
 
     try {
-        // Fetch box details
         const response = await fetch(`/wykaz-zablokowanych/boxes/${ncNumber}`);
         const data = await response.json();
 
         if (data.success && data.boxes.length > 0) {
-            // Build table HTML with optimized column widths
             let tableHtml = `
                 <table class="modal-table" style="table-layout: fixed; width: 100%;">
                     <colgroup>
-                        <col style="width: 30%;">  <!-- Nr opakowania -->
-                        <col style="width: 18%;">  <!-- Data produkcji -->
-                        <col style="width: 14%;">  <!-- Operator -->
-                        <col style="width: 12%;">  <!-- Ilość -->
-                        <col style="width: 26%;">  <!-- Lokalizacja -->
+                        <col style="width: 30%;">
+                        <col style="width: 18%;">
+                        <col style="width: 14%;">
+                        <col style="width: 12%;">
+                        <col style="width: 26%;">
                     </colgroup>
                     <thead>
                         <tr>
@@ -391,21 +320,19 @@ async function openBoxesModal(ncNumber) {
 
             data.boxes.forEach(box => {
                 tableHtml += `
-                    <tr style="padding: 2py;">
-                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${box.numero_confezione}">${box.numero_confezione}</td>
+                    <tr>
+                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                            title="${box.numero_confezione}">${box.numero_confezione}</td>
                         <td style="white-space: nowrap; font-size: 0.75rem;">${box.data_carico}</td>
                         <td style="text-align: center;">${box.oper_carico}</td>
                         <td style="text-align: right; font-weight: 500;">${box.qt_blocked}</td>
-                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${box.location}">${box.location}</td>
+                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                            title="${box.location}">${box.location}</td>
                     </tr>
                 `;
             });
 
-            tableHtml += `
-                    </tbody>
-                </table>
-            `;
-
+            tableHtml += '</tbody></table>';
             modalBody.innerHTML = tableHtml;
         } else {
             modalBody.innerHTML = '<div class="modal-loading">Brak danych o opakowaniach</div>';
@@ -417,15 +344,14 @@ async function openBoxesModal(ncNumber) {
 }
 
 /**
- * Close boxes modal
+ * Close boxes modal.
  */
 function closeBoxesModal() {
-    const modal = document.getElementById('boxes-modal');
-    modal.classList.remove('active');
+    document.getElementById('boxes-modal').classList.remove('active');
 }
 
 /**
- * Close modal when clicking on backdrop
+ * Close modal when clicking on backdrop.
  */
 function closeModalOnBackdrop(event) {
     if (event.target.id === 'boxes-modal') {

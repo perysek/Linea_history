@@ -63,14 +63,14 @@
             <!-- Fixed Header Table -->
             <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
-                    <col style="width: 10%;">  <!-- COMM -->
+                    <col style="width: 9%;">  <!-- COMM -->
                     <col style="width: 9%;">   <!-- DATA -->
                     <col style="width: 7%;">   <!-- GODZ -->
                     <col style="width: 10%;">  <!-- NR_NIEZG -->
-                    <col style="width: 10%;">  <!-- TYP_UWAGI -->
-                    <col style="width: 25%;">  <!-- UWAGA -->
-                    <col style="width: 10%;">  <!-- MASZYNA -->
-                    <col style="width: 10%;">  <!-- KOD_DETALU -->
+                    <col style="width: 8%;">  <!-- TYP_UWAGI -->
+                    <col style="width: 30%;">  <!-- UWAGA -->
+                    <col style="width: 7%;">  <!-- MASZYNA -->
+                    <col style="width: 11%;">  <!-- KOD_DETALU -->
                     <col style="width: 9%;">   <!-- NR_FORMY -->
                 </colgroup>
                 <thead>
@@ -173,17 +173,17 @@
             <!-- Scrollable Body -->
             <div class="tbody-scroll">
                 <table class="refined-table">
-                    <colgroup>
-                        <col style="width: 10%;">  <!-- COMM -->
-                        <col style="width: 9%;">   <!-- DATA -->
-                        <col style="width: 7%;">   <!-- GODZ -->
-                        <col style="width: 10%;">  <!-- NR_NIEZG -->
-                        <col style="width: 10%;">  <!-- TYP_UWAGI -->
-                        <col style="width: 25%;">  <!-- UWAGA -->
-                        <col style="width: 10%;">  <!-- MASZYNA -->
-                        <col style="width: 10%;">  <!-- KOD_DETALU -->
-                        <col style="width: 9%;">   <!-- NR_FORMY -->
-                    </colgroup>
+                     <colgroup>
+	                    <col style="width: 9%;">  <!-- COMM -->
+	                    <col style="width: 9%;">   <!-- DATA -->
+	                    <col style="width: 7%;">   <!-- GODZ -->
+	                    <col style="width: 10%;">  <!-- NR_NIEZG -->
+	                    <col style="width: 8%;">  <!-- TYP_UWAGI -->
+	                    <col style="width: 30%;">  <!-- UWAGA -->
+	                    <col style="width: 7%;">  <!-- MASZYNA -->
+	                    <col style="width: 11%;">  <!-- KOD_DETALU -->
+	                    <col style="width: 9%;">   <!-- NR_FORMY -->
+	                </colgroup>
                     <tbody id="linea-tbody">
                         <tr>
                             <td colspan="9" style="text-align: center; padding: 2rem;">Ładowanie...</td>
@@ -194,26 +194,17 @@
         </div>
 
         <!-- Pagination Bar -->
-        <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="pagination-bar">
             <span class="pagination-info">
                 Wyświetlono <span class="pagination-count" id="visible-count">0</span>
                 z <span class="pagination-count" id="total-count">0</span> rekordów
             </span>
-            <button type="button"
-                    id="btn-load-more"
-                    onclick="loadMore()"
-                    style="padding: 0.5rem 1rem;
-                           background: var(--color-accent);
-                           color: white;
-                           border: none;
-                           border-radius: 6px;
-                           font-size: 0.875rem;
-                           font-weight: 500;
-                           cursor: pointer;
-                           display: none;
-                           transition: background 0.2s;">
-                Załaduj więcej
-            </button>
+            <span class="scroll-loading-indicator" id="scroll-loading-indicator">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Ładowanie kolejnych rekordów...
+            </span>
         </div>
     </div>
 

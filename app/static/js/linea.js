@@ -13,11 +13,25 @@ let currentAbortController = null;  // For cancelling requests
 let currentOffset = 0;
 let totalRecords = 0;
 const RECORDS_PER_PAGE = 100;
+let hasMoreRecords = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load
     fetchRecords();
+
+    // Infinite scroll on table body
+    const tbodyScroll = document.querySelector('.tbody-scroll');
+    if (tbodyScroll) {
+        tbodyScroll.addEventListener('scroll', () => {
+            if (isLoading || !hasMoreRecords) return;
+            const { scrollTop, scrollHeight, clientHeight } = tbodyScroll;
+            if (scrollTop + clientHeight >= scrollHeight - 100) {
+                currentOffset += RECORDS_PER_PAGE;
+                fetchRecords(false);
+            }
+        });
+    }
 
     // Setup column search inputs with server-side filtering
     document.querySelectorAll('.column-search').forEach(input => {
@@ -93,6 +107,12 @@ async function fetchRecords(resetOffset = true) {
     currentAbortController = new AbortController();
     isLoading = true;
 
+    // Show loading indicator only for pagination loads (not initial/reset)
+    const loadingIndicator = document.getElementById('scroll-loading-indicator');
+    if (loadingIndicator && !resetOffset) {
+        loadingIndicator.style.display = 'inline-flex';
+    }
+
     const tbody = document.getElementById('linea-tbody');
     const params = new URLSearchParams();
 
@@ -162,6 +182,9 @@ async function fetchRecords(resetOffset = true) {
     } finally {
         isLoading = false;
         currentAbortController = null;
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
     }
 }
 
@@ -271,30 +294,10 @@ function updateCount(visible, total) {
 }
 
 /**
- * Update Load More button visibility
+ * Update infinite scroll state
  */
 function updateLoadMoreButton(pagination) {
-    const loadMoreBtn = document.getElementById('btn-load-more');
-    if (loadMoreBtn) {
-        if (pagination.has_more) {
-            loadMoreBtn.style.display = 'inline-block';
-        } else {
-            loadMoreBtn.style.display = 'none';
-        }
-    }
-}
-
-/**
- * Load more records
- */
-function loadMore() {
-    if (isLoading) {
-        console.log('Already loading data...');
-        return;
-    }
-
-    currentOffset += RECORDS_PER_PAGE;
-    fetchRecords(false);  // Don't reset offset
+    hasMoreRecords = pagination.has_more;
 }
 
 /**
@@ -439,7 +442,8 @@ async function openDetailsModal(codiceRiparazione, nrNiezg) {
                     }
 
                     contentHTML += `
-                        <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-bottom: 1.5rem;">
+                        <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;
+                        margin-bottom: 0.5rem;">
                             <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #856404;">
                                 🔒 Ilość zablokowanych części
                             </h3>
