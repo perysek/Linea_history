@@ -3,6 +3,7 @@
  * Matches linea.js pagination pattern.
  */
 
+// ── NC view state ────────────────────────────────
 let currentSort = { field: 'KOD_DETALU', direction: 'asc' };
 let searchFilters = {};
 let allParts = [];
@@ -15,12 +16,22 @@ let totalRecords = 0;
 const PARTS_PER_PAGE = 100;
 let hasMoreRecords = false;
 
+// ── Part-code view state ──────────────────────────
+let currentView = 'nc';  // 'nc' | 'kod'
+let partSort = { field: 'KOD_DETALU', direction: 'asc' };
+let partSearchFilters = {};
+let partAbortController = null;
+let allPartsByCode = [];  // full dataset fetched once; sort/filter run client-side
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Set default active toggle (Nr niezgodności)
+    document.getElementById('btn-nr-niezg').classList.add('active');
+
     fetchParts();
 
-    // Infinite scroll on table body
-    const tbodyScroll = document.querySelector('.tbody-scroll');
+    // Infinite scroll on NC table body
+    const tbodyScroll = document.querySelector('#view-nc .tbody-scroll');
     if (tbodyScroll) {
         tbodyScroll.addEventListener('scroll', () => {
             if (isLoading || !hasMoreRecords) return;
@@ -32,11 +43,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Column search inputs with debounce
+    // NC view column search inputs
     document.querySelectorAll('.column-search').forEach(input => {
         input.addEventListener('input', debounce(() => {
             searchFilters[input.dataset.column] = input.value.trim();
             applyFilters();
+            updateClearFiltersButton();
+        }, 300));
+    });
+
+    // Part-code view column search input — client-side, no re-fetch
+    document.querySelectorAll('.column-search-part').forEach(input => {
+        input.addEventListener('input', debounce(() => {
+            partSearchFilters[input.dataset.column] = input.value.trim();
+            applyPartFiltersAndSort();
             updateClearFiltersButton();
         }, 300));
     });
@@ -240,22 +260,31 @@ function updateSortIcons(activeField) {
 }
 
 /**
- * Clear all column search filters.
+ * Clear all column search filters for the active view.
  */
 function clearAllFilters() {
-    document.querySelectorAll('.column-search').forEach(input => { input.value = ''; });
-    searchFilters = {};
-    applyFilters();
+    if (currentView === 'nc') {
+        document.querySelectorAll('.column-search').forEach(input => { input.value = ''; });
+        searchFilters = {};
+        applyFilters();
+    } else {
+        document.querySelectorAll('.column-search-part').forEach(input => { input.value = ''; });
+        partSearchFilters = {};
+        applyPartFiltersAndSort();
+    }
     updateClearFiltersButton();
 }
 
 /**
- * Show/hide the clear filters button.
+ * Show/hide the clear filters button based on the active view.
  */
 function updateClearFiltersButton() {
     const clearBtn = document.getElementById('btn-clear-filters');
-    const hasActive = Object.values(searchFilters).some(v => v !== '');
-    if (clearBtn) clearBtn.style.display = hasActive ? 'inline-flex' : 'none';
+    if (!clearBtn) return;
+    const activeFilters = currentView === 'nc'
+        ? Object.values(searchFilters)
+        : Object.values(partSearchFilters);
+    clearBtn.style.display = activeFilters.some(v => v !== '') ? 'inline-flex' : 'none';
 }
 
 /**
@@ -356,5 +385,203 @@ function closeBoxesModal() {
 function closeModalOnBackdrop(event) {
     if (event.target.id === 'boxes-modal') {
         closeBoxesModal();
+    }
+}
+
+// ═══════════════════════════════════════════════════
+// View toggle — "Nr niezgodności" / "Kod detalu"
+// ═══════════════════════════════════════════════════
+
+/**
+ * Switch between NC view and part-code grouped view.
+ * @param {'nc'|'kod'} view
+ */
+function setView(view) {
+    currentView = view;
+
+    const viewNc   = document.getElementById('view-nc');
+    const viewKod  = document.getElementById('view-kod');
+    const btnNc    = document.getElementById('btn-nr-niezg');
+    const btnKod   = document.getElementById('btn-kod-detalu');
+
+    if (view === 'nc') {
+        viewNc.style.display = '';
+        viewKod.style.display = 'none';
+        btnNc.classList.add('active');
+        btnKod.classList.remove('active');
+        updateClearFiltersButton();
+    } else {
+        viewNc.style.display = 'none';
+        viewKod.style.display = '';
+        btnNc.classList.remove('active');
+        btnKod.classList.add('active');
+        updateClearFiltersButton();
+        // First visit: fetch from server. Subsequent toggles: re-render from cache.
+        if (allPartsByCode.length === 0) {
+            fetchPartsByCode();
+        } else {
+            applyPartFiltersAndSort();
+        }
+    }
+}
+
+/**
+ * Fetch all blocked parts by part code from the server (called once).
+ * Stores result in allPartsByCode, then delegates to applyPartFiltersAndSort.
+ */
+async function fetchPartsByCode() {
+    if (partAbortController) partAbortController.abort();
+    partAbortController = new AbortController();
+
+    const tbody = document.getElementById('part-tbody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
+
+    try {
+        const response = await fetch('/api/wykaz-zablokowanych/by-part', {
+            signal: partAbortController.signal
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            allPartsByCode = data.parts;  // cache full dataset
+            applyPartFiltersAndSort();
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych z MOSYS</td></tr>';
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') return;
+        console.error('Error fetching parts by code:', error);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
+                    <p style="font-size: 1rem; font-weight: 500; color: #c33; margin-bottom: 0.5rem;">Błąd połączenia z MOSYS</p>
+                    <p style="font-size: 0.875rem;">Nie udało się pobrać danych.</p>
+                </td>
+            </tr>`;
+    } finally {
+        partAbortController = null;
+    }
+}
+
+/**
+ * Filter and sort allPartsByCode client-side, then render.
+ * Called on every sort click or search input — no network request.
+ */
+function applyPartFiltersAndSort() {
+    let data = allPartsByCode.slice();  // shallow copy to avoid mutating cache
+
+    // Filter by KOD_DETALU search
+    const searchKod = (partSearchFilters['KOD_DETALU'] || '').toLowerCase();
+    if (searchKod) {
+        data = data.filter(p => (p.kod_detalu || '').toLowerCase().includes(searchKod));
+    }
+
+    // Sort
+    const fieldKeyMap = { KOD_DETALU: 'kod_detalu', NA_STANIE: 'na_stanie', W_TYM_ZABL: 'w_tym_zabl', W_TYM_DOSTEP: 'w_tym_dostep' };
+    const key = fieldKeyMap[partSort.field] || 'kod_detalu';
+    const dir = partSort.direction === 'asc' ? 1 : -1;
+
+    data.sort((a, b) => {
+        if (key === 'kod_detalu') {
+            return dir * (a.kod_detalu || '').toLowerCase().localeCompare((b.kod_detalu || '').toLowerCase());
+        }
+        return dir * ((a[key] || 0) - (b[key] || 0));
+    });
+
+    renderPartsByCode(data);
+    updatePartCount(data.length, allPartsByCode.length);
+
+    // Pill totals reflect the filtered subset so the user sees live feedback
+    const totalBlocked = data.reduce((sum, p) => sum + (p.w_tym_zabl || 0), 0);
+    updatePartsSummaryPills(data.length, totalBlocked);
+}
+
+/**
+ * Render part-code grouped rows into part-tbody.
+ */
+function renderPartsByCode(parts) {
+    const tbody = document.getElementById('part-tbody');
+
+    if (parts.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
+                    <p style="font-size: 1.125rem; font-weight: 500;">Brak zablokowanych detali</p>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    const fmt = (n) => n.toLocaleString('pl-PL').replace(/,/g, ' ');
+
+    tbody.innerHTML = parts.map(p => `
+        <tr>
+            <td style="font-weight: 500;">${escapeHtml(p.kod_detalu) || '-'}</td>
+            <td style="text-align: right; padding-right: 1.5rem;">${fmt(p.na_stanie)}</td>
+            <td style="text-align: right; font-weight: 500; color: #991b1b; padding-right: 1.5rem;">${fmt(p.w_tym_zabl)}</td>
+            <td style="text-align: right; font-weight: 500; color: #166534; padding-right: 1.5rem;">${fmt(p.w_tym_dostep)}</td>
+        </tr>
+    `).join('');
+}
+
+/**
+ * Sort the part-code table.
+ */
+function sortPartTable(field) {
+    if (partSort.field === field) {
+        partSort.direction = partSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        partSort.field = field;
+        partSort.direction = field === 'KOD_DETALU' ? 'asc' : 'desc';
+    }
+    updatePartSortIcons(field);
+    applyPartFiltersAndSort();
+}
+
+/**
+ * Update sort icon states for the part-code table.
+ */
+function updatePartSortIcons(activeField) {
+    document.querySelectorAll('#view-kod .sortable').forEach(th => {
+        const sortIcon = th.querySelector('.sort-icon');
+        if (!sortIcon) return;
+        const thHeader = th.querySelector('.th-header');
+        if (!thHeader) return;
+        const onclickAttr = thHeader.getAttribute('onclick');
+        if (!onclickAttr) return;
+        const match = onclickAttr.match(/sortPartTable\('(.+?)'\)/);
+        const field = match ? match[1] : null;
+
+        if (field === activeField) {
+            th.classList.add('sorted');
+            sortIcon.style.opacity = '1';
+            sortIcon.style.transform = partSort.direction === 'desc' ? 'rotate(180deg)' : 'rotate(0deg)';
+        } else {
+            th.classList.remove('sorted');
+            sortIcon.style.opacity = '0';
+            sortIcon.style.transform = 'rotate(0deg)';
+        }
+    });
+}
+
+/**
+ * Update pagination counter for part-code view.
+ */
+function updatePartCount(visible, total) {
+    const visEl = document.getElementById('part-visible-count');
+    const totEl = document.getElementById('part-total-count');
+    if (visEl) visEl.textContent = visible;
+    if (totEl) totEl.textContent = total;
+}
+
+/**
+ * Update summary pills when in part-code view.
+ */
+function updatePartsSummaryPills(count, totalBlocked) {
+    document.getElementById('row-count').textContent = `${count} kodów`;
+    const blockedPill = document.getElementById('total-blocked-pill');
+    if (blockedPill) {
+        const fmt = (n) => n.toLocaleString('pl-PL').replace(/,/g, ' ');
+        blockedPill.textContent = `${fmt(totalBlocked)} szt. zablokowanych`;
     }
 }

@@ -116,6 +116,46 @@ def api_wykaz_zablokowanych():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@placeholder_bp.route('/api/wykaz-zablokowanych/by-part')
+def api_wykaz_zablokowanych_by_part():
+    """AJAX endpoint: blocked parts grouped by part code (Kod detalu view)."""
+    sort_field = request.args.get('sort', 'KOD_DETALU')
+    sort_dir = request.args.get('dir', 'asc')
+    search_kod = request.args.get('search_KOD_DETALU', '').lower()
+
+    try:
+        from MOSYS_data_functions import get_blocked_parts_by_part_code
+        parts = get_blocked_parts_by_part_code()
+
+        if search_kod:
+            parts = [p for p in parts if search_kod in (p.get('kod_detalu') or '').lower()]
+
+        sort_key_map = {
+            'KOD_DETALU':    'kod_detalu',
+            'NA_STANIE':     'na_stanie',
+            'W_TYM_ZABL':    'w_tym_zabl',
+            'W_TYM_DOSTEP':  'w_tym_dostep',
+        }
+        sort_key = sort_key_map.get(sort_field, 'kod_detalu')
+        reverse = sort_dir == 'desc'
+
+        if sort_key == 'kod_detalu':
+            parts.sort(key=lambda p: (p.get(sort_key) or '').lower(), reverse=reverse)
+        else:
+            parts.sort(key=lambda p: p.get(sort_key) or 0, reverse=reverse)
+
+        return jsonify({
+            'success': True,
+            'parts': parts,
+            'total_count': len(parts),
+            'total_na_stanie': sum(p['na_stanie'] for p in parts),
+            'total_w_tym_zabl': sum(p['w_tym_zabl'] for p in parts),
+        })
+    except Exception as e:
+        print(f"Error in api_wykaz_zablokowanych_by_part: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @placeholder_bp.route('/wykaz-zablokowanych/boxes/<nr_niezgodnosci>')
 def get_blocked_boxes(nr_niezgodnosci):
     """Get box details for a specific NC number."""

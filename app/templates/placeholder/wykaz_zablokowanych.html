@@ -24,9 +24,22 @@
             </span>
         </div>
 
+        <!-- Group-by Toggle -->
+        <div style="display: inline-flex; align-items: center; gap: 0.375rem; margin-left: auto;">
+            <span style="font-size: 0.6875rem; color: var(--color-ink-muted); white-space: nowrap;">Pogrupowane po</span>
+            <button type="button" class="filter-pill" id="btn-nr-niezg"
+                    onclick="setView('nc')" style="border-radius: 999px 0 0 999px; border-right: none;">
+                Nr niezgodności
+            </button>
+            <button type="button" class="filter-pill" id="btn-kod-detalu"
+                    onclick="setView('kod')" style="border-radius: 0 999px 999px 0;">
+                Kod detalu
+            </button>
+        </div>
+
         <!-- Clear Filters Button -->
         <button type="button" class="btn-clear-filters" id="btn-clear-filters"
-                onclick="clearAllFilters()" style="display: none;">
+                onclick="clearAllFilters()" style="display: none; margin-left: 0.5rem;">
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -34,8 +47,8 @@
         </button>
     </div>
 
-    <!-- Table Container -->
-    <div class="table-container">
+    <!-- Table Container — NC view (default) -->
+    <div class="table-container" id="view-nc">
         <div class="table-scroll-wrapper">
             <!-- Fixed Header Table -->
             <table class="refined-table" style="flex-shrink: 0;">
@@ -167,6 +180,93 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 Ładowanie kolejnych rekordów...
+            </span>
+        </div>
+    </div>
+
+    <!-- Table Container — Kod detalu view (hidden by default) -->
+    <div class="table-container" id="view-kod" style="display: none;">
+        <div class="table-scroll-wrapper">
+            <!-- Fixed Header Table -->
+            <table class="refined-table" style="flex-shrink: 0;">
+                <colgroup>
+                    <col style="width: 35%;">  <!-- KOD_DETALU -->
+                    <col style="width: 21%;">  <!-- NA_STANIE -->
+                    <col style="width: 22%;">  <!-- W_TYM_ZABL -->
+                    <col style="width: 22%;">  <!-- W_TYM_DOSTEP -->
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortPartTable('KOD_DETALU')" style="cursor: pointer;">
+                                    <span>Kod detalu</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search-part" placeholder="Szukaj..." data-column="KOD_DETALU">
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortPartTable('NA_STANIE')" style="cursor: pointer;">
+                                    <span style="text-align: right;">na stanie</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortPartTable('W_TYM_ZABL')" style="cursor: pointer;">
+                                    <span style="text-align: right;">w tym zabl.</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortPartTable('W_TYM_DOSTEP')" style="cursor: pointer;">
+                                    <span style="text-align: right;">w tym dostęp.</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+            </table>
+
+            <!-- Scrollable Body -->
+            <div class="tbody-scroll" id="part-tbody-scroll">
+                <table class="refined-table">
+                    <colgroup>
+                        <col style="width: 35%;">
+                        <col style="width: 21%;">
+                        <col style="width: 22%;">
+                        <col style="width: 22%;">
+                    </colgroup>
+                    <tbody id="part-tbody">
+                        <tr>
+                            <td colspan="4" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
+                                Ładowanie...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-bar">
+            <span class="pagination-info">
+                Wyświetlono <span class="pagination-count" id="part-visible-count">0</span>
+                z <span class="pagination-count" id="part-total-count">0</span> kodów detalu
             </span>
         </div>
     </div>
