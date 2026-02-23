@@ -378,6 +378,116 @@ function clearAllFilters() {
 
 
 /**
+ * Build HTML for NC history + sorting sections (shared between modal types).
+ * Uses the /api/nc-history response object.
+ */
+function buildNcInfoSectionsHTML(data, nrNiezg) {
+    let html = '';
+    const SECTION_DIVIDER = 'border-top: 1px solid var(--color-border); padding-top: 1rem; margin-top: 0.75rem;';
+    const H3 = 'margin: 0 0 0.5rem 0; font-size: 0.875rem; font-weight: 600; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em;';
+    const TH = 'padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight: 600;';
+
+    // ── Section: Historia wpisów ─────────────────────────────────────────────
+    html += `<div style="${SECTION_DIVIDER}">`;
+    html += `<h3 style="${H3}">Historia wpisów</h3>`;
+
+    if (data.history && data.history.length > 0) {
+        html += `<table class="nc-table" style="width:100%; border-collapse:collapse; font-size:0.8125rem; margin-bottom:0.25rem;">
+            <thead><tr>
+                <th style="text-align:left; ${TH} white-space:nowrap;">Data</th>
+                <th style="text-align:left; ${TH} white-space:nowrap;">Godz.</th>
+                <th style="text-align:left; ${TH} white-space:nowrap;">Typ</th>
+                <th style="text-align:left; ${TH}">Treść wpisu</th>
+            </tr></thead>
+            <tbody>`;
+
+        data.history.forEach((entry, idx) => {
+            const rowBg = idx % 2 === 0 ? '' : 'background: var(--color-surface, #f8fafc);';
+            const typBg  = entry.typ_uwagi === 'NC' ? '#dbeafe' : entry.typ_uwagi === 'OK' ? '#dcfce7' : entry.typ_uwagi === 'AC' ? '#fef9c3' : '#f1f5f9';
+            const typClr = entry.typ_uwagi === 'NC' ? '#1d4ed8' : entry.typ_uwagi === 'OK' ? '#166534' : entry.typ_uwagi === 'AC' ? '#854d0e' : 'var(--color-ink-muted)';
+            html += `<tr style="${rowBg}">
+                <td style="padding:0.45rem 0.75rem; white-space:nowrap; color:var(--color-ink-subtle);">${escapeHtml(entry.data_wpisu)}</td>
+                <td style="padding:0.45rem 0.75rem; white-space:nowrap; color:var(--color-ink-subtle);">${escapeHtml(entry.godzina_wpisu)}</td>
+                <td style="padding:0.45rem 0.75rem; white-space:nowrap;">
+                    <span style="display:inline-block; padding:0.1rem 0.4rem; border-radius:3px; font-size:0.75rem; font-weight:500; background:${typBg}; color:${typClr};">${escapeHtml(mapTypUwagi(entry.typ_uwagi))}</span>
+                </td>
+                <td style="padding:0.45rem 0.75rem; line-height:1.4;">${escapeHtml(entry.tekst_wpisu)}</td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+    } else {
+        html += `<p style="font-size:0.8125rem; color:var(--color-ink-subtle);">Brak wpisów historii dla tego numeru NC.</p>`;
+    }
+    html += '</div>';
+
+    // ── Section: Przeprowadzone selekcje ────────────────────────────────────
+    const s = data.sorting;
+    if (s && s.nr_zamowienia) {
+        html += `<div style="${SECTION_DIVIDER}">`;
+        html += `<h3 style="${H3}">Przeprowadzone selekcje — zamówienie <span style="font-weight:700; color:var(--color-ink);">${escapeHtml(s.nr_zamowienia)}</span></h3>`;
+
+        if (s.rows && s.rows.length > 0) {
+            html += `<table class="nc-table" style="width:100%; border-collapse:collapse; font-size:0.8125rem;">
+                <thead><tr>
+                    <th style="text-align:left;  ${TH} white-space:nowrap;">NC NR</th>
+                    <th style="text-align:left;  ${TH} white-space:nowrap;">Data NC</th>
+                    <th style="text-align:right; ${TH} white-space:nowrap;">Sprawdzono</th>
+                    <th style="text-align:right; ${TH} white-space:nowrap;">Braków</th>
+                    <th style="text-align:right; ${TH} white-space:nowrap;">Śr.brak.%</th>
+                    <th style="text-align:right; ${TH} white-space:nowrap;">Śr.wydajn.</th>
+                </tr></thead>
+                <tbody>`;
+
+            s.rows.forEach((row, idx) => {
+                const isCurrent = row.nr_niezgodnosci === nrNiezg;
+                const rowStyle = isCurrent
+                    ? 'background:#eff6ff; font-weight:600;'
+                    : (idx % 2 === 0 ? '' : 'background:var(--color-surface,#f8fafc);');
+                const scrapClr = row.scrap_rate === null ? 'var(--color-ink-subtle)'
+                    : row.scrap_rate >= 5 ? '#ef4444' : row.scrap_rate >= 2 ? '#f59e0b'
+                    : row.scrap_rate > 0  ? '#10b981' : 'var(--color-ink-subtle)';
+                const scrapWgt = row.scrap_rate !== null && row.scrap_rate >= 5 ? '600'
+                    : row.scrap_rate !== null && row.scrap_rate >= 2 ? '500' : 'normal';
+                const dot = isCurrent
+                    ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b82f6;margin-right:0.35rem;vertical-align:middle;"></span>'
+                    : '';
+                html += `<tr style="${rowStyle}">
+                    <td style="padding:0.45rem 0.75rem; white-space:nowrap;">${dot}${escapeHtml(row.nr_niezgodnosci)}</td>
+                    <td style="padding:0.45rem 0.75rem; white-space:nowrap; color:var(--color-ink-subtle);">${escapeHtml(row.data_niezgodnosci)}</td>
+                    <td style="padding:0.45rem 0.75rem; text-align:right; font-weight:500;">${row.total_sorted.toLocaleString('pl-PL')}</td>
+                    <td style="padding:0.45rem 0.75rem; text-align:right; color:${row.total_nok > 0 ? '#f59e0b' : 'var(--color-ink-subtle)'}; font-weight:${row.total_nok > 0 ? '500' : 'normal'};">${row.total_nok}</td>
+                    <td style="padding:0.45rem 0.75rem; text-align:right; color:${scrapClr}; font-weight:${scrapWgt};">${row.scrap_rate !== null ? row.scrap_rate.toFixed(1) : '-'}</td>
+                    <td style="padding:0.45rem 0.75rem; text-align:right; color:var(--color-ink-subtle);">${row.wydajnosc !== null ? row.wydajnosc + ' szt/h' : '-'}</td>
+                </tr>`;
+            });
+
+            html += '</tbody>';
+            if (s.rows.length > 1) {
+                const sm = s.summary;
+                const smClr = sm.scrap_rate === null ? 'var(--color-ink-subtle)'
+                    : sm.scrap_rate >= 5 ? '#ef4444' : sm.scrap_rate >= 2 ? '#f59e0b'
+                    : sm.scrap_rate > 0  ? '#10b981' : 'var(--color-ink-subtle)';
+                html += `<tfoot>
+                    <tr style="border-top:2px solid var(--color-border); background:#f8fafc;">
+                        <td colspan="2" style="padding:0.5rem 0.75rem; font-weight:600; font-size:0.8125rem;">Razem / Średnia</td>
+                        <td style="padding:0.5rem 0.75rem; text-align:right; font-weight:700;">${sm.total_sorted.toLocaleString('pl-PL')}</td>
+                        <td style="padding:0.5rem 0.75rem; text-align:right; font-weight:700; color:${sm.total_nok > 0 ? '#f59e0b' : 'var(--color-ink-subtle)'};">${sm.total_nok}</td>
+                        <td style="padding:0.5rem 0.75rem; text-align:right; font-weight:700; color:${smClr};">${sm.scrap_rate !== null ? sm.scrap_rate.toFixed(1) : '-'}</td>
+                        <td style="padding:0.5rem 0.75rem; text-align:right; font-weight:600; color:var(--color-ink-subtle);">${sm.wydajnosc !== null ? sm.wydajnosc + ' szt/h' : '-'}</td>
+                    </tr>
+                </tfoot>`;
+            }
+            html += '</table>';
+        } else {
+            html += `<p style="font-size:0.8125rem; color:var(--color-ink-subtle);">Brak danych selekcji dla tego zamówienia.</p>`;
+        }
+        html += '</div>';
+    }
+
+    return html;
+}
+
+/**
  * Open details modal - shows repair details and/or blocked parts info
  */
 async function openDetailsModal(codiceRiparazione, nrNiezg) {
@@ -497,6 +607,19 @@ async function openDetailsModal(codiceRiparazione, nrNiezg) {
                 if (!nrNiezg) {
                     contentHTML += '<div class="modal-loading" style="color: var(--color-error);">Błąd ładowania danych naprawy</div>';
                 }
+            }
+        }
+
+        // Fetch NC history + sorting activity
+        if (nrNiezg) {
+            try {
+                const histResponse = await fetch(`/api/nc-history/${encodeURIComponent(nrNiezg)}`);
+                const histData = await histResponse.json();
+                if (histData.success) {
+                    contentHTML += buildNcInfoSectionsHTML(histData, nrNiezg);
+                }
+            } catch (error) {
+                console.error('Error fetching NC history:', error);
             }
         }
 

@@ -174,48 +174,31 @@ def get_part_number(nr_zamowienia: str) -> str:
 
 def get_blocked_parts_qty(nr_niezgodnosci: str) -> int:
 	"""
-	Calculate total quantity of parts blocked (segregated) for a given nr_niezgodnosci.
+	Calculate total quantity of parts currently blocked for a given nr_niezgodnosci.
 
-	Method:
-	1. Get all box numbers (NUMERO_CONFEZIONE) from SEGCONF for this nr_niezgodnosci
-	2. Get quantities (QT_CONTENUTA) from MAGCONF for each box
-	3. Sum all quantities
+	Uses a single JOIN between SEGCONF and MAGCONF and sums
+	(QT_CONTENUTA - QT_PRELEV) — the net remaining quantity in each box —
+	excluding boxes that have been fully withdrawn (net qty <= 0).
 
-	Returns: Total quantity of blocked parts
+	Returns: Total net quantity of blocked parts
 	"""
 	if not nr_niezgodnosci:
 		return 0
 
+	query = '''
+		SELECT SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL_BLOCKED
+		FROM STAAMPDB.SEGCONF SEGCONF
+		INNER JOIN STAAMPDB.MAGCONF MAGCONF
+			ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
+		WHERE SEGCONF.NUMERO_NON_CONF = ?
+		  AND (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) > 0
+	'''
 	try:
-		# Step 1: Get all box numbers for this NC
-		query_boxes = '''
-			SELECT SEGCONF.NUMERO_CONFEZIONE
-			FROM STAAMPDB.SEGCONF SEGCONF
-			WHERE SEGCONF.NUMERO_NON_CONF = ?
-		'''
-		df_boxes = get_pervasive(query_boxes, (nr_niezgodnosci,))
-
-		if df_boxes.empty:
+		df = get_pervasive(query, (nr_niezgodnosci,))
+		if df.empty:
 			return 0
-
-		box_numbers = df_boxes['NUMERO_CONFEZIONE'].tolist()
-
-		# Step 2: Get quantities for all boxes
-		placeholders = ','.join(['?' for _ in box_numbers])
-		query_qty = f'''
-			SELECT MAGCONF.QT_CONTENUTA
-			FROM STAAMPDB.MAGCONF MAGCONF
-			WHERE MAGCONF.NUMERO_CONFEZIONE IN ({placeholders})
-		'''
-		df_qty = get_pervasive(query_qty, tuple(box_numbers))
-
-		if df_qty.empty:
-			return 0
-
-		# Step 3: Sum all quantities
-		total_qty = df_qty['QT_CONTENUTA'].sum()
-		return int(total_qty) if total_qty else 0
-
+		total = df.iloc[0]['TOTAL_BLOCKED']
+		return int(total) if total else 0
 	except Exception as e:
 		print(f"Error calculating blocked parts qty for {nr_niezgodnosci}: {e}")
 		return 0
@@ -235,27 +218,43 @@ def get_batch_niezgodnosc_details(nr_niezgodnosci_list: list) -> dict:
 		return {}
 	
 	result = {}
-	
-	# First query: get DATA and COMMESSA for all nr_niezgodnosci
+
+	# First query: get DATA, COMMESSA and NC description notes (TIPO_NOTA='NC' = initial description entry)
 	placeholders = ','.join(['?' for _ in nr_list])
 	query = f'''
-		SELECT NOTCOJAN.NUMERO_NC, NOTCOJAN.DATA, NOTCOJAN.COMMESSA
+		SELECT NOTCOJAN.NUMERO_NC, NOTCOJAN.DATA, NOTCOJAN.COMMESSA,
+		NOTCOJAN.NOTE_01, NOTCOJAN.NOTE_02, NOTCOJAN.NOTE_03, NOTCOJAN.NOTE_04, NOTCOJAN.NOTE_05,
+		NOTCOJAN.NOTE_06, NOTCOJAN.NOTE_07, NOTCOJAN.NOTE_08, NOTCOJAN.NOTE_09, NOTCOJAN.NOTE_10
 		FROM STAAMPDB.NOTCOJAN NOTCOJAN
 		WHERE NOTCOJAN.NUMERO_NC IN ({placeholders})
+		AND NOTCOJAN.TIPO_NOTA = 'NC'
+		ORDER BY NOTCOJAN.DATA ASC, NOTCOJAN.ORA ASC
 	'''
-	
+
 	try:
 		df = get_pervasive(query, tuple(nr_list))
-		
-		# Build intermediate results
+
+		# Build intermediate results — take first row per NC (oldest entry = NC description)
 		commessa_to_fetch = set()
 		for _, row in df.iterrows():
 			nr = row['NUMERO_NC']
-			result[nr] = {
-				'data_niezgodnosci': parse_mosys_date(row['DATA']),
-				'nr_zamowienia': row['COMMESSA'],
-				'kod_detalu': None
-			}
+			if nr not in result:
+				# Parse notes into description text
+				notes = []
+				for i in range(1, 11):
+					note = None
+					for col_name in [f'NOTE_{i:02d}', f'NOTE{i:02d}', f'NOTE_{i}', f'NOTE{i}']:
+						if col_name in row.index:
+							note = row[col_name]
+							break
+					if note and str(note).strip():
+						notes.append(str(note).strip())
+				result[nr] = {
+					'data_niezgodnosci': parse_mosys_date(row['DATA']),
+					'nr_zamowienia': row['COMMESSA'],
+					'kod_detalu': None,
+					'opis_niezgodnosci': ' '.join(notes),
+				}
 			if row['COMMESSA']:
 				commessa_to_fetch.add(row['COMMESSA'])
 		

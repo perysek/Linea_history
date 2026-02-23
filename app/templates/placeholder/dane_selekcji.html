@@ -7,18 +7,18 @@
 <style>
 /* Fix search input alignment with table cells */
 .refined-table th {
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 0.3rem;
 }
 
 .refined-table .th-content {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.1rem;
 }
 
 .refined-table .column-search {
-    width: calc(100% + 2px);
-    padding: 0.15rem 0.25rem;
+    width: calc(100% - 10px);
+    padding: 0.15rem 0.15rem;
     margin: 0;
     box-sizing: border-box;
 }
@@ -31,7 +31,7 @@
 .table-scroll-wrapper {
     display: flex;
     flex-direction: column;
-    overflow-x: auto;
+    overflow-x: hidden;
     position: relative;
 }
 
@@ -128,6 +128,13 @@
                class="filter-pill {% if preset == 'previous_year' %}active{% endif %}">Poprzedni rok</a>
             <a href="{{ url_for('placeholder.dane_selekcji', preset='all') }}"
                class="filter-pill {% if preset == 'all' %}active{% endif %}">Wszystko</a>
+            <button type="button" class="btn-clear-filters" id="btn-clear-filters"
+                    onclick="clearColumnFilters()" style="display: none;">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right: 0.25rem;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Usuń filtry
+            </button>
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -185,21 +192,22 @@
             <!-- Fixed Header Table -->
             <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
-                    <col style="width: 7.3%;">  <!-- DATA -->
-                    <col style="width: 7.3%;">  <!-- DZIAŁ -->
-                    <col style="width: 5.5%;">  <!-- RAPORT -->
-                    <col style="width: 8.2%;">  <!-- NR NC -->
-                    <col style="width: 7.3%;">  <!-- DATA NC -->
-                    <col style="width: 5.6%;">  <!-- ZAM -->
-                    <col style="width: 10.6%;">  <!-- KOD DETALU -->
-                    <col style="width: 8.1%;">  <!-- INSTRUKCJA -->
-                    <col style="width: 5.5%;">  <!-- ONLINE -->
-                    <col style="width: 4.6%;">  <!-- ILOŚĆ -->
-                    <col style="width: 2.7%;">  <!-- NOK -->
-                    <col style="width: 13.6%;">  <!-- WADY -->
-                    <col style="width: 5.4%;">  <!-- BRAKI % -->
-                    <col style="width: 3.7%;">  <!-- CZAS -->
-                    <col style="width: 4.6%;">  <!-- szt/godz -->
+                    <col style="width: 6.0%;">  <!-- DATA -->
+                    <col style="width: 6.5%;">  <!-- DZIAŁ -->
+                    <col style="width: 5%;">    <!-- RAPORT -->
+                    <col style="width: 7.0%;">  <!-- NR NC -->
+                    <col style="width: 6.0%;">  <!-- DATA NC -->
+                    <col style="width: 5%;">    <!-- ZAM -->
+                    <col style="width: 9.5%;">  <!-- KOD DETALU -->
+                    <col style="width: 15%;">   <!-- OPIS NIEZG -->
+                    <col style="width: 7%;">    <!-- INSTRUKCJA -->
+                    <col style="width: 5%;">    <!-- ONLINE -->
+                    <col style="width: 5%;">    <!-- ILOŚĆ -->
+                    <col style="width: 3%;">  <!-- NOK -->
+                    <col style="width: 10%;">   <!-- WADY -->
+                    <col style="width: 4.5%;">  <!-- BRAKI % -->
+                    <col style="width: 3%;">    <!-- CZAS -->
+                    <col style="width: 2.5%;">  <!-- szt/godz -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -268,6 +276,15 @@
                         </th>
                         <th class="sortable">
                             <div class="th-content">
+                                <div class="th-header" onclick="sortColumn('opis_niezgodnosci')" style="cursor: pointer;">
+                                    OPIS NIEZG
+                                    <span class="sort-icon">{{ '▼' if sort_by == 'opis_niezgodnosci' and order == 'desc' else '▲' if sort_by == 'opis_niezgodnosci' else '' }}</span>
+                                </div>
+                                <input type="text" class="column-search" placeholder="szukaj..." id="filter_opis_niezgodnosci" value="{{ filters.opis_niezgodnosci }}">
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
                                 <div class="th-header" onclick="sortColumn('nr_instrukcji')" style="cursor: pointer;">
                                     INSTR
                                     <span class="sort-icon">{{ '▼' if sort_by == 'nr_instrukcji' and order == 'desc' else '▲' if sort_by == 'nr_instrukcji' else '' }}</span>
@@ -300,7 +317,7 @@
                                 <input type="text" class="column-search" placeholder="szukaj..." id="filter_defekt" value="{{ filters.defekt }}">
                             </div>
                         </th>
-                        <th style="text-align: right;">BRAKI %</th>
+                        <th style="text-align: right;">%NOK</th>
                         <th class="sortable" style="text-align: right;">
                             <div class="th-content">
                                 <div class="th-header" onclick="sortColumn('czas_pracy')" style="cursor: pointer;">
@@ -309,7 +326,7 @@
                                 </div>
                             </div>
                         </th>
-                        <th style="text-align: right;">szt/h</th>
+                        <th style="text-align: right; white-space: normal; word-break: break-word;">szt/ h</th>
                     </tr>
                 </thead>
             </table>
@@ -318,33 +335,35 @@
             <div class="tbody-scroll">
                 <table class="refined-table">
                     <colgroup>
-                        <col style="width: 7.3%;">  <!-- DATA -->
-                        <col style="width: 7.3%;">  <!-- DZIAŁ -->
-                        <col style="width: 5.5%;">  <!-- RAPORT -->
-                        <col style="width: 8.2%;">  <!-- NR NC -->
-                        <col style="width: 7.3%;">  <!-- DATA NC -->
-                        <col style="width: 5.6%;">  <!-- ZAM -->
-                        <col style="width: 10.6%;">  <!-- KOD DETALU -->
-                        <col style="width: 8.1%;">  <!-- INSTRUKCJA -->
-                        <col style="width: 5.5%;">  <!-- ONLINE -->
-                        <col style="width: 4.6%;">  <!-- ILOŚĆ -->
-                        <col style="width: 2.7%;">  <!-- NOK -->
-                        <col style="width: 13.6%;">  <!-- WADY -->
-                        <col style="width: 5.4%;">  <!-- BRAKI % -->
-                        <col style="width: 3.7%;">  <!-- CZAS -->
-                        <col style="width: 4.6%;">  <!-- szt/godz -->
+                        <col style="width: 6.0%;">  <!-- DATA -->
+                        <col style="width: 6.5%;">  <!-- DZIAŁ -->
+                        <col style="width: 5%;">    <!-- RAPORT -->
+                        <col style="width: 7.0%;">  <!-- NR NC -->
+                        <col style="width: 6.0%;">  <!-- DATA NC -->
+                        <col style="width: 5%;">    <!-- ZAM -->
+                        <col style="width: 9.5%;">  <!-- KOD DETALU -->
+                        <col style="width: 15%;">   <!-- OPIS NIEZG -->
+                        <col style="width: 7%;">    <!-- INSTRUKCJA -->
+                        <col style="width: 5%;">    <!-- ONLINE -->
+                        <col style="width: 5%;">    <!-- ILOŚĆ -->
+                        <col style="width: 3.0%;">  <!-- NOK -->
+                        <col style="width: 10%;">   <!-- WADY -->
+                        <col style="width: 4.5%;">  <!-- BRAKI % -->
+                        <col style="width: 3%;">    <!-- CZAS -->
+                        <col style="width: 2.5%;">  <!-- szt/godz -->
                     </colgroup>
                     <tbody id="dane-tbody">
                     {% if reports %}
                         {% for report in reports %}
-                        <tr>
+                        <tr {% if report.nr_niezgodnosci %}class="clickable-row" data-nr-niezgodnosci="{{ report.nr_niezgodnosci }}"{% endif %}>
                             <td style="font-size: 1rem;">{{ report.data_selekcji.strftime('%d.%m.%y') if report.data_selekcji else '-' }}</td>
                             <td style="font-size: 1rem;">{{ report.operator.dzial.opis_kategorii if report.operator and report.operator.dzial else '-' }}</td>
                             <td style="font-size: 1rem;">{{ report.nr_raportu }}</td>
                             <td style="font-size: 1rem;">{{ report.nr_niezgodnosci }}</td>
                             <td style="font-size: 1rem;">{{ report.data_niezgodnosci.strftime('%d.%m.%y') if report.data_niezgodnosci else '-' }}</td>
                             <td style="font-size: 1rem;">{{ report.nr_zamowienia or '-' }}</td>
-                            <td style="font-size: 1rem;">{{ report.kod_detalu or '-' }}</td>
+                            <td style="font-size: 1rem; white-space: normal; word-break: break-word;">{{ report.kod_detalu or '-' }}</td>
+                            <td style="font-size: 0.75rem; white-space: normal; word-break: break-word; line-height: 1.35;">{{ report.opis_niezgodnosci or '-' }}</td>
                             <td style="font-size: 1rem;">{{ report.nr_instrukcji or '-' }}</td>
                             <td style="text-align: center; font-size: 0.8125rem;">
                                 {% if report.selekcja_na_biezaco %}
@@ -393,7 +412,7 @@
                         {% endfor %}
                     {% else %}
                     <tr>
-                        <td colspan="15" style="text-align: center; padding: 3rem; color: var(--color-ink-subtle);">
+                        <td colspan="16" style="text-align: center; padding: 3rem; color: var(--color-ink-subtle);">
                             <div style="font-size: 1rem; margin-bottom: 0.5rem;">Brak danych</div>
                             <div style="font-size: 0.75rem;">Brak raportów selekcji dla wybranego okresu</div>
                         </td>
@@ -416,6 +435,25 @@
                 </svg>
                 Ładowanie kolejnych rekordów...
             </span>
+        </div>
+    </div>
+    <!-- NC History Modal -->
+    <div id="nc-history-modal" class="modal-overlay" onclick="closeNcHistoryModalOnBackdrop(event)">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">Zapisy w LINEA</h2>
+                    <p class="modal-subtitle">dla niezgodności nr <span id="nc-modal-nr"></span></p>
+                </div>
+                <button class="modal-close-btn" onclick="closeNcHistoryModal()">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="nc-modal-body">
+                <div class="modal-loading">Ładowanie...</div>
+            </div>
         </div>
     </div>
 </div>
@@ -471,7 +509,7 @@ function updateTable(reports, sortBy, order) {
     if (reports.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="15" style="text-align: center; padding: 3rem; color: var(--color-ink-subtle);">
+                <td colspan="16" style="text-align: center; padding: 3rem; color: var(--color-ink-subtle);">
                     <div style="font-size: 1rem; margin-bottom: 0.5rem;">Brak danych</div>
                     <div style="font-size: 0.75rem;">Brak raportów selekcji dla wybranego okresu</div>
                 </td>
@@ -493,15 +531,21 @@ function updateTable(reports, sortBy, order) {
                 scrapColor = '#10b981';
             }
 
+            const hasNc = report.nr_niezgodnosci && report.nr_niezgodnosci !== '-';
+            const rowAttrs = hasNc
+                ? `class="clickable-row" data-nr-niezgodnosci="${escapeHtml(report.nr_niezgodnosci)}"`
+                : '';
+
             html += `
-                <tr>
+                <tr ${rowAttrs}>
                     <td style="font-size: 1rem;">${report.data_selekcji}</td>
                     <td style="font-size: 1rem;">${report.dzial}</td>
                     <td style="font-size: 1rem;">${report.nr_raportu}</td>
                     <td style="font-size: 1rem;">${report.nr_niezgodnosci}</td>
                     <td style="font-size: 1rem;">${report.data_niezgodnosci}</td>
                     <td style="font-size: 1rem;">${report.nr_zamowienia}</td>
-                    <td style="font-size: 1rem;">${report.kod_detalu}</td>
+                    <td style="font-size: 1rem; white-space: normal; word-break: break-word;">${report.kod_detalu}</td>
+                    <td style="font-size: 0.75rem; white-space: normal; word-break: break-word; line-height: 1.35;">${escapeHtml(report.opis_niezgodnosci)}</td>
                     <td style="font-size: 1rem;">${report.nr_instrukcji}</td>
                     <td style="text-align: center; font-size: 0.8125rem;">
                         ${report.selekcja_na_biezaco
@@ -557,11 +601,12 @@ function updateSortIndicators(sortBy, order) {
         'data_niezgodnosci': 4,
         'nr_zamowienia': 5,
         'kod_detalu': 6,
-        'nr_instrukcji': 7,
-        'selekcja_na_biezaco': 8,
-        'ilosc_detali_sprawdzonych': 9,
-        'defekt': 11,
-        'czas_pracy': 13
+        'opis_niezgodnosci': 7,
+        'nr_instrukcji': 8,
+        'selekcja_na_biezaco': 9,
+        'ilosc_detali_sprawdzonych': 10,
+        'defekt': 12,
+        'czas_pracy': 14
     };
 
     const headerIndex = sortableHeaders[sortBy];
@@ -700,6 +745,7 @@ async function fetchData(resetOffset = true) {
         'filter_data_nc': document.getElementById('filter_data_nc')?.value || '',
         'filter_commessa': document.getElementById('filter_commessa')?.value || '',
         'filter_kod_detalu': document.getElementById('filter_kod_detalu')?.value || '',
+        'filter_opis_niezgodnosci': document.getElementById('filter_opis_niezgodnosci')?.value || '',
         'filter_defekt': document.getElementById('filter_defekt')?.value || ''
     };
 
@@ -890,6 +936,262 @@ function debounce(func, wait) {
     };
 }
 
+// Escape HTML to prevent XSS in dynamically built strings
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Map TYP_UWAGI codes to Polish labels (matches linea.js mapping)
+function mapTypUwagi(typ) {
+    const mapping = { 'NC': 'Otwarcie', 'AC': 'Działania', 'AV': 'Uwaga', 'OK': 'Zamknięcie' };
+    return mapping[typ] || typ;
+}
+
+// Open NC history modal and fetch data
+async function openNcHistoryModal(nrNiezgodnosci) {
+    const modal = document.getElementById('nc-history-modal');
+    const modalNr = document.getElementById('nc-modal-nr');
+    const modalBody = document.getElementById('nc-modal-body');
+
+    modalNr.textContent = nrNiezgodnosci;
+    modalBody.innerHTML = '<div class="modal-loading">Ładowanie...</div>';
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    try {
+        const response = await fetch(`/api/nc-history/${encodeURIComponent(nrNiezgodnosci)}`);
+        const data = await response.json();
+
+        if (data.success) {
+            let html = '';
+
+            // ── Section 1: history table ──────────────────────────────────────
+            if (data.history.length > 0) {
+                html += `
+                    <table class="nc-table" style="width:100%; border-collapse: collapse; font-size: 0.8125rem; margin-bottom: 1.5rem;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Data</th>
+                                <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Godz.</th>
+                                <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Typ</th>
+                                <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600;">Treść wpisu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                data.history.forEach((entry, idx) => {
+                    const rowBg = idx % 2 === 0 ? '' : 'background: var(--color-surface, #f8fafc);';
+                    const typBg = entry.typ_uwagi === 'NC' ? '#dbeafe' : entry.typ_uwagi === 'OK' ? '#dcfce7' : entry.typ_uwagi === 'AC' ? '#fef9c3' : '#f1f5f9';
+                    const typClr = entry.typ_uwagi === 'NC' ? '#1d4ed8' : entry.typ_uwagi === 'OK' ? '#166534' : entry.typ_uwagi === 'AC' ? '#854d0e' : 'var(--color-ink-muted)';
+                    html += `
+                        <tr style="${rowBg}">
+                            <td style="padding: 0.45rem 0.75rem; white-space:nowrap; color: var(--color-ink-subtle);">${escapeHtml(entry.data_wpisu)}</td>
+                            <td style="padding: 0.45rem 0.75rem; white-space:nowrap; color: var(--color-ink-subtle);">${escapeHtml(entry.godzina_wpisu)}</td>
+                            <td style="padding: 0.45rem 0.75rem; white-space:nowrap;">
+                                <span style="display:inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.75rem; font-weight:500; background:${typBg}; color:${typClr};">
+                                    ${escapeHtml(mapTypUwagi(entry.typ_uwagi))}
+                                </span>
+                            </td>
+                            <td style="padding: 0.45rem 0.75rem; line-height: 1.4;">${escapeHtml(entry.tekst_wpisu)}</td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table>';
+            } else {
+                html += `<p style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-bottom: 1.5rem;">Brak wpisów historii dla tego numeru NC.</p>`;
+            }
+
+            // ── Section 2: blocked parts for this PN code ─────────────────────
+            const b = data.blocked;
+            if (b) {
+                const pnLabel = b.kod_detalu
+                    ? `<span style="font-weight:600; color: var(--color-ink);">${escapeHtml(b.kod_detalu)}</span>`
+                    : '<span style="color: var(--color-ink-muted);">nieznany</span>';
+
+                html += `
+                    <div style="border-top: 1px solid var(--color-border); padding-top: 1rem;">
+                        <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; font-weight: 600; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                            Lista zablokowanych sztuk dla detalu    ${pnLabel}
+                        </h3>
+                `;
+
+                if (b.related_ncs && b.related_ncs.length > 0) {
+                    html += `
+                        <table class="nc-table" style="width:100%; border-collapse: collapse; font-size: 0.8125rem;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">NR NC</th>
+                                    <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Data NC</th>
+                                    <th style="text-align:left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600;">Opis niezgodności</th>
+                                    <th style="text-align:right; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Ilość zablokowana</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    b.related_ncs.forEach((nc, idx) => {
+                        const isCurrent = nc.nr_niezgodnosci === nrNiezgodnosci;
+                        const rowStyle = isCurrent
+                            ? 'background: #eff6ff; font-weight: 600;'
+                            : (idx % 2 === 0 ? '' : 'background: var(--color-surface, #f8fafc);');
+                        html += `
+                            <tr style="${rowStyle}">
+                                <td style="padding: 0.45rem 0.75rem; white-space:nowrap;">
+                                    ${isCurrent ? '<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#3b82f6; margin-right:0.35rem; vertical-align:middle;"></span>' : ''}
+                                    ${escapeHtml(nc.nr_niezgodnosci)}
+                                </td>
+                                <td style="padding: 0.45rem 0.75rem; white-space:nowrap; color: var(--color-ink-subtle);">${escapeHtml(nc.data_niezgodnosci)}</td>
+                                <td style="padding: 0.45rem 0.75rem; line-height: 1.4; color: var(--color-ink-subtle);">${escapeHtml(nc.opis_niezgodnosci)}</td>
+                                <td style="padding: 0.45rem 0.75rem; text-align:right; font-weight: 500; color: #f59e0b;">${nc.ilosc_zablokowanych} szt.</td>
+                            </tr>
+                        `;
+                    });
+                    html += '</tbody>';
+                    if (b.related_ncs.length > 1) {
+                        html += `
+                            <tfoot>
+                                <tr style="border-top: 2px solid var(--color-border);">
+                                    <td colspan="3" style="padding: 0.5rem 0.75rem; font-weight: 600; font-size: 0.8125rem;">Razem zablokowanych (${escapeHtml(b.kod_detalu)}):</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align:right; font-weight: 700; font-size: 0.9375rem; color: #f59e0b;">${b.total_blocked_for_pn} szt.</td>
+                                </tr>
+                            </tfoot>
+                        `;
+                    }
+                    html += '</table>';
+                } else {
+                    html += `<p style="font-size: 0.8125rem; color: var(--color-ink-subtle); margin-top: 0.25rem;">Brak zablokowanych detali dla tego kodu.</p>`;
+                }
+                html += '</div>';
+            }
+
+            // ── Section 3: sorting activity per NC for this nr_zamowienia ─────
+            const s = data.sorting;
+            if (s && s.nr_zamowienia) {
+                html += `
+                    <div style="border-top: 1px solid var(--color-border); padding-top: 1rem; margin-top: 0.25rem;">
+                        <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; font-weight: 600; color: var(--color-ink-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                            Przeprowadzone selekcje dla tego zamówienia (<span style="font-weight:700; color: var(--color-ink);
+                            ">${escapeHtml(s.nr_zamowienia)
+                            })</span>
+                        </h3>
+                `;
+
+                if (s.rows && s.rows.length > 0) {
+                    html += `
+                        <table class="nc-table" style="width:100%; border-collapse: collapse; font-size: 0.8125rem;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;  padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">NC NR</th>
+                                    <th style="text-align:left;  padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Data NC</th>
+                                    <th style="text-align:right; padding: 0.5rem 0.75rem; border-bottom: 1px solid var
+                                    (--color-border); font-weight:600; white-space:nowrap;">Sprawdzono</th>
+                                    <th style="text-align:right; padding: 0.5rem 0.75rem; border-bottom: 1px solid var
+                                    (--color-border); font-weight:600; white-space:nowrap;">Braków</th>
+                                    <th style="text-align:right; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Śr.brak.%</th>
+                                    <th style="text-align:right; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-weight:600; white-space:nowrap;">Śr.wydajn.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    s.rows.forEach((row, idx) => {
+                        const isCurrent = row.nr_niezgodnosci === nrNiezgodnosci;
+                        const rowStyle = isCurrent
+                            ? 'background: #eff6ff; font-weight: 600;'
+                            : (idx % 2 === 0 ? '' : 'background: var(--color-surface, #f8fafc);');
+
+                        // Scrap rate color (matching codebase conventions)
+                        let scrapHtml = '<span style="color: var(--color-ink-subtle);">-</span>';
+                        if (row.scrap_rate !== null) {
+                            const clr = row.scrap_rate >= 5 ? '#ef4444'
+                                      : row.scrap_rate >= 2 ? '#f59e0b'
+                                      : row.scrap_rate >  0 ? '#10b981'
+                                      : 'var(--color-ink-subtle)';
+                            const wgt = row.scrap_rate >= 5 ? '600'
+                                      : row.scrap_rate >= 2 ? '500' : 'normal';
+                            scrapHtml = `<span style="color:${clr}; font-weight:${wgt};">${row.scrap_rate.toFixed(1)}</span>`;
+                        }
+
+                        html += `
+                            <tr style="${rowStyle}">
+                                <td style="padding: 0.45rem 0.75rem; white-space:nowrap;">
+                                    ${isCurrent ? '<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#3b82f6; margin-right:0.35rem; vertical-align:middle;"></span>' : ''}
+                                    ${escapeHtml(row.nr_niezgodnosci)}
+                                </td>
+                                <td style="padding: 0.45rem 0.75rem; white-space:nowrap; color: var(--color-ink-subtle);">${escapeHtml(row.data_niezgodnosci)}</td>
+                                <td style="padding: 0.45rem 0.75rem; text-align:right; font-weight:500;">${row.total_sorted.toLocaleString('pl-PL')}</td>
+                                <td style="padding: 0.45rem 0.75rem; text-align:right; color: ${row.total_nok > 0 ? '#f59e0b' : 'var(--color-ink-subtle)'}; font-weight: ${row.total_nok > 0 ? '500' : 'normal'};">${row.total_nok}</td>
+                                <td style="padding: 0.45rem 0.75rem; text-align:right;">${scrapHtml}</td>
+                                <td style="padding: 0.45rem 0.75rem; text-align:right; color: var(--color-ink-subtle);">${row.wydajnosc !== null ? row.wydajnosc + ' szt/h' : '-'}</td>
+                            </tr>
+                        `;
+                    });
+
+                    // Summary row
+                    const sm = s.summary;
+                    html += '</tbody>';
+                    if (s.rows.length > 1) {
+                        const sm = s.summary;
+                        const smScrapClr = sm.scrap_rate === null ? 'var(--color-ink-subtle)'
+                                         : sm.scrap_rate >= 5 ? '#ef4444'
+                                         : sm.scrap_rate >= 2 ? '#f59e0b'
+                                         : sm.scrap_rate >  0 ? '#10b981'
+                                         : 'var(--color-ink-subtle)';
+                        html += `
+                            <tfoot>
+                                <tr style="border-top: 2px solid var(--color-border); background: #f8fafc;">
+                                    <td colspan="2" style="padding: 0.5rem 0.75rem; font-weight:600; font-size: 0.8125rem;">Razem / Średnia</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align:right; font-weight:700;">${sm.total_sorted.toLocaleString('pl-PL')}</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align:right; font-weight:700; color: ${sm.total_nok > 0 ? '#f59e0b' : 'var(--color-ink-subtle)'};">${sm.total_nok}</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align:right; font-weight:700; color:${smScrapClr};">${sm.scrap_rate !== null ? sm.scrap_rate.toFixed(1) : '-'}</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align:right; font-weight:600; color: var(--color-ink-subtle);">${sm.wydajnosc !== null ? sm.wydajnosc + ' szt/h' : '-'}</td>
+                                </tr>
+                            </tfoot>
+                        `;
+                    }
+                    html += '</table>';
+                } else {
+                    html += `<p style="font-size: 0.8125rem; color: var(--color-ink-subtle);">Brak danych selekcji dla tego zamówienia.</p>`;
+                }
+                html += '</div>';
+            }
+
+            modalBody.innerHTML = html;
+        } else {
+            modalBody.innerHTML = `<div class="modal-loading" style="color: var(--color-error);">Błąd: ${escapeHtml(data.error || 'Nieznany błąd')}</div>`;
+        }
+    } catch (error) {
+        console.error('Error fetching NC history:', error);
+        modalBody.innerHTML = '<div class="modal-loading" style="color: var(--color-error);">Błąd połączenia z serwerem.</div>';
+    }
+}
+
+function closeNcHistoryModal() {
+    document.getElementById('nc-history-modal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function closeNcHistoryModalOnBackdrop(event) {
+    if (event.target.id === 'nc-history-modal') {
+        closeNcHistoryModal();
+    }
+}
+
+// Show/hide the clear-filters button depending on whether any column filter is active
+function updateClearFiltersButton() {
+    const hasActive = Array.from(document.querySelectorAll('.column-search'))
+        .some(input => input.value.trim() !== '');
+    document.getElementById('btn-clear-filters').style.display = hasActive ? 'inline-flex' : 'none';
+}
+
+// Clear all column search inputs and re-fetch
+function clearColumnFilters() {
+    document.querySelectorAll('.column-search').forEach(input => { input.value = ''; });
+    updateClearFiltersButton();
+    applyFilters();
+}
+
 // Handle search inputs
 document.addEventListener('DOMContentLoaded', function() {
     // Set initial month label and button states
@@ -907,11 +1209,30 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Event delegation for clickable rows (handles both server-rendered and AJAX-rendered rows)
+    const daneTableBody = document.getElementById('dane-tbody');
+    if (daneTableBody) {
+        daneTableBody.addEventListener('click', function(e) {
+            const row = e.target.closest('tr[data-nr-niezgodnosci]');
+            if (row) {
+                openNcHistoryModal(row.dataset.nrNiezgodnosci);
+            }
+        });
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeNcHistoryModal();
+    });
+
+    // Show button if any filter is pre-filled from URL params on initial load
+    updateClearFiltersButton();
+
     const searchInputs = document.querySelectorAll('.column-search');
 
     searchInputs.forEach(input => {
-        // Real-time filtering with debounce
         input.addEventListener('input', debounce(function() {
+            updateClearFiltersButton();
             applyFilters();
         }, 300));
     });
