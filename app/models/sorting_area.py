@@ -41,6 +41,7 @@ class DaneRaportu(db.Model):
     data_niezgodnosci = db.Column(db.Date, nullable=True)
     nr_zamowienia = db.Column(db.String(50), nullable=True)
     kod_detalu = db.Column(db.String(50), nullable=True)
+    opis_niezgodnosci = db.Column(db.Text, nullable=True)
     nr_instrukcji = db.Column(db.String(50))
     selekcja_na_biezaco = db.Column(db.Boolean, default=False)
     ilosc_detali_sprawdzonych = db.Column(db.Integer)

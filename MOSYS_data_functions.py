@@ -84,6 +84,7 @@ def get_niezgodnosc_details(nr_niezgodnosci: str) -> dict:
 	return {'data_niezgodnosci': None, 'nr_zamowienia': None}
 
 
+# noinspection D
 def get_nc_history(nr_niezgodnosci: str) -> list:
 	"""
 	Get history of updates for a given nr_niezgodnosci.
@@ -173,48 +174,31 @@ def get_part_number(nr_zamowienia: str) -> str:
 
 def get_blocked_parts_qty(nr_niezgodnosci: str) -> int:
 	"""
-	Calculate total quantity of parts blocked (segregated) for a given nr_niezgodnosci.
+	Calculate total quantity of parts currently blocked for a given nr_niezgodnosci.
 
-	Method:
-	1. Get all box numbers (NUMERO_CONFEZIONE) from SEGCONF for this nr_niezgodnosci
-	2. Get quantities (QT_CONTENUTA) from MAGCONF for each box
-	3. Sum all quantities
+	Uses a single JOIN between SEGCONF and MAGCONF and sums
+	(QT_CONTENUTA - QT_PRELEV) — the net remaining quantity in each box —
+	excluding boxes that have been fully withdrawn (net qty <= 0).
 
-	Returns: Total quantity of blocked parts
+	Returns: Total net quantity of blocked parts
 	"""
 	if not nr_niezgodnosci:
 		return 0
 
+	query = '''
+		SELECT SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL_BLOCKED
+		FROM STAAMPDB.SEGCONF SEGCONF
+		INNER JOIN STAAMPDB.MAGCONF MAGCONF
+			ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
+		WHERE SEGCONF.NUMERO_NON_CONF = ?
+		  AND (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) > 0
+	'''
 	try:
-		# Step 1: Get all box numbers for this NC
-		query_boxes = '''
-			SELECT SEGCONF.NUMERO_CONFEZIONE
-			FROM STAAMPDB.SEGCONF SEGCONF
-			WHERE SEGCONF.NUMERO_NON_CONF = ?
-		'''
-		df_boxes = get_pervasive(query_boxes, (nr_niezgodnosci,))
-
-		if df_boxes.empty:
+		df = get_pervasive(query, (nr_niezgodnosci,))
+		if df.empty:
 			return 0
-
-		box_numbers = df_boxes['NUMERO_CONFEZIONE'].tolist()
-
-		# Step 2: Get quantities for all boxes
-		placeholders = ','.join(['?' for _ in box_numbers])
-		query_qty = f'''
-			SELECT MAGCONF.QT_CONTENUTA
-			FROM STAAMPDB.MAGCONF MAGCONF
-			WHERE MAGCONF.NUMERO_CONFEZIONE IN ({placeholders})
-		'''
-		df_qty = get_pervasive(query_qty, tuple(box_numbers))
-
-		if df_qty.empty:
-			return 0
-
-		# Step 3: Sum all quantities
-		total_qty = df_qty['QT_CONTENUTA'].sum()
-		return int(total_qty) if total_qty else 0
-
+		total = df.iloc[0]['TOTAL_BLOCKED']
+		return int(total) if total else 0
 	except Exception as e:
 		print(f"Error calculating blocked parts qty for {nr_niezgodnosci}: {e}")
 		return 0
@@ -234,27 +218,43 @@ def get_batch_niezgodnosc_details(nr_niezgodnosci_list: list) -> dict:
 		return {}
 	
 	result = {}
-	
-	# First query: get DATA and COMMESSA for all nr_niezgodnosci
+
+	# First query: get DATA, COMMESSA and NC description notes (TIPO_NOTA='NC' = initial description entry)
 	placeholders = ','.join(['?' for _ in nr_list])
 	query = f'''
-		SELECT NOTCOJAN.NUMERO_NC, NOTCOJAN.DATA, NOTCOJAN.COMMESSA
+		SELECT NOTCOJAN.NUMERO_NC, NOTCOJAN.DATA, NOTCOJAN.COMMESSA,
+		NOTCOJAN.NOTE_01, NOTCOJAN.NOTE_02, NOTCOJAN.NOTE_03, NOTCOJAN.NOTE_04, NOTCOJAN.NOTE_05,
+		NOTCOJAN.NOTE_06, NOTCOJAN.NOTE_07, NOTCOJAN.NOTE_08, NOTCOJAN.NOTE_09, NOTCOJAN.NOTE_10
 		FROM STAAMPDB.NOTCOJAN NOTCOJAN
 		WHERE NOTCOJAN.NUMERO_NC IN ({placeholders})
+		AND NOTCOJAN.TIPO_NOTA = 'NC'
+		ORDER BY NOTCOJAN.DATA ASC, NOTCOJAN.ORA ASC
 	'''
-	
+
 	try:
 		df = get_pervasive(query, tuple(nr_list))
-		
-		# Build intermediate results
+
+		# Build intermediate results — take first row per NC (oldest entry = NC description)
 		commessa_to_fetch = set()
 		for _, row in df.iterrows():
 			nr = row['NUMERO_NC']
-			result[nr] = {
-				'data_niezgodnosci': parse_mosys_date(row['DATA']),
-				'nr_zamowienia': row['COMMESSA'],
-				'kod_detalu': None
-			}
+			if nr not in result:
+				# Parse notes into description text
+				notes = []
+				for i in range(1, 11):
+					note = None
+					for col_name in [f'NOTE_{i:02d}', f'NOTE{i:02d}', f'NOTE_{i}', f'NOTE{i}']:
+						if col_name in row.index:
+							note = row[col_name]
+							break
+					if note and str(note).strip():
+						notes.append(str(note).strip())
+				result[nr] = {
+					'data_niezgodnosci': parse_mosys_date(row['DATA']),
+					'nr_zamowienia': row['COMMESSA'],
+					'kod_detalu': None,
+					'opis_niezgodnosci': ' '.join(notes),
+				}
 			if row['COMMESSA']:
 				commessa_to_fetch.add(row['COMMESSA'])
 		
@@ -282,6 +282,7 @@ def get_batch_niezgodnosc_details(nr_niezgodnosci_list: list) -> dict:
 	return result
 
 
+# noinspection D
 def get_all_blocked_parts() -> list:
 	"""
 	Get all part numbers currently blocked (segregated) in MOSYS.
@@ -389,6 +390,100 @@ def get_all_blocked_parts() -> list:
 	return results
 
 
+def get_blocked_parts_by_part_code() -> list:
+	"""
+	Get stock summary grouped by part code (CODICE_ARTICOLO).
+
+	Two server-side GROUP BY queries minimise ODBC data transfer:
+	  Q1 (INNER JOIN, server GROUP BY) → w_tym_zabl per part code + list of blocked part codes
+	  Q2 (MAGCONF only, IN clause,    → na_stanie per part code
+	       server GROUP BY)
+
+	Only part codes that have at least some blocked stock are returned.
+
+	Returns list of dicts with keys: kod_detalu, na_stanie, w_tym_zabl, w_tym_dostep
+	"""
+	import time
+	T = time.perf_counter
+
+	t0 = T()
+
+	# ── Q1: blocked qty per part code ──────────────────────────────────────
+	# INNER JOIN — only boxes linked to a 2023+ NC.  GROUP BY happens on the
+	# server so only one aggregated row per part code crosses the ODBC wire.
+	query_blocked = '''
+		SELECT MAGCONF.CODICE_ARTICOLO,
+		       SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS W_TYM_ZABL
+		FROM STAAMPDB.SEGCONF SEGCONF
+		INNER JOIN STAAMPDB.MAGCONF MAGCONF
+			ON MAGCONF.NUMERO_CONFEZIONE = SEGCONF.NUMERO_CONFEZIONE
+		WHERE SEGCONF.NUMERO_NON_CONF > 202300000
+		  AND (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) > 0
+		  AND MAGCONF.BOX_Z <> '055'
+		GROUP BY MAGCONF.CODICE_ARTICOLO
+	'''
+	try:
+		df_blocked = get_pervasive(query_blocked)
+	except Exception as e:
+		print(f"[get_blocked_parts_by_part_code] Q1 error: {e}")
+		return []
+
+	t1 = T()
+	print(f"[TIMER] Q1 blocked (INNER JOIN + GROUP BY): {(t1 - t0) * 1000:.1f}ms — {len(df_blocked)} blocked part codes")
+
+	if df_blocked.empty:
+		return []
+
+	part_codes = df_blocked['CODICE_ARTICOLO'].tolist()
+	blocked_map = {row['CODICE_ARTICOLO']: int(row['W_TYM_ZABL'] or 0)
+	               for _, row in df_blocked.iterrows()}
+
+	t2 = T()
+	print(f"[TIMER] build blocked_map: {(t2 - t1) * 1000:.1f}ms")
+
+	# ── Q2: total stock for only the blocked part codes ─────────────────────
+	# IN clause limits MAGCONF scan to relevant part codes only.
+	# GROUP BY on server — one row per part code over ODBC.
+	placeholders = ','.join(['?' for _ in part_codes])
+	query_stock = f'''
+		SELECT MAGCONF.CODICE_ARTICOLO,
+		       SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS NA_STANIE
+		FROM STAAMPDB.MAGCONF MAGCONF
+		WHERE (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) > 0
+		  AND MAGCONF.BOX_Z <> '055'
+		  AND MAGCONF.CODICE_ARTICOLO IN ({placeholders})
+		GROUP BY MAGCONF.CODICE_ARTICOLO
+	'''
+	try:
+		df_stock = get_pervasive(query_stock, tuple(part_codes))
+		stock_map = {row['CODICE_ARTICOLO']: int(row['NA_STANIE'] or 0)
+		             for _, row in df_stock.iterrows()}
+	except Exception as e:
+		print(f"[get_blocked_parts_by_part_code] Q2 error: {e}")
+		stock_map = {}
+
+	t3 = T()
+	print(f"[TIMER] Q2 total stock (IN + GROUP BY): {(t3 - t2) * 1000:.1f}ms — {len(stock_map)} rows")
+
+	# ── Build result list ────────────────────────────────────────────────────
+	results = []
+	for part_code, zabl in blocked_map.items():
+		na = stock_map.get(part_code, 0)
+		results.append({
+			'kod_detalu': part_code,
+			'na_stanie': na,
+			'w_tym_zabl': zabl,
+			'w_tym_dostep': max(0, na - zabl),
+		})
+
+	t4 = T()
+	print(f"[TIMER] build results list: {(t4 - t3) * 1000:.1f}ms — {len(results)} rows")
+	print(f"[TIMER] TOTAL get_blocked_parts_by_part_code: {(t4 - t0) * 1000:.1f}ms")
+
+	return results
+
+
+# noinspection D
 def get_blocked_boxes_details(nr_niezgodnosci: str) -> list:
 	"""
 	Get detailed information about all boxes for a specific NC number.

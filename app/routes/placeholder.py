@@ -116,6 +116,46 @@ def api_wykaz_zablokowanych():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@placeholder_bp.route('/api/wykaz-zablokowanych/by-part')
+def api_wykaz_zablokowanych_by_part():
+    """AJAX endpoint: blocked parts grouped by part code (Kod detalu view)."""
+    sort_field = request.args.get('sort', 'KOD_DETALU')
+    sort_dir = request.args.get('dir', 'asc')
+    search_kod = request.args.get('search_KOD_DETALU', '').lower()
+
+    try:
+        from MOSYS_data_functions import get_blocked_parts_by_part_code
+        parts = get_blocked_parts_by_part_code()
+
+        if search_kod:
+            parts = [p for p in parts if search_kod in (p.get('kod_detalu') or '').lower()]
+
+        sort_key_map = {
+            'KOD_DETALU':    'kod_detalu',
+            'NA_STANIE':     'na_stanie',
+            'W_TYM_ZABL':    'w_tym_zabl',
+            'W_TYM_DOSTEP':  'w_tym_dostep',
+        }
+        sort_key = sort_key_map.get(sort_field, 'kod_detalu')
+        reverse = sort_dir == 'desc'
+
+        if sort_key == 'kod_detalu':
+            parts.sort(key=lambda p: (p.get(sort_key) or '').lower(), reverse=reverse)
+        else:
+            parts.sort(key=lambda p: p.get(sort_key) or 0, reverse=reverse)
+
+        return jsonify({
+            'success': True,
+            'parts': parts,
+            'total_count': len(parts),
+            'total_na_stanie': sum(p['na_stanie'] for p in parts),
+            'total_w_tym_zabl': sum(p['w_tym_zabl'] for p in parts),
+        })
+    except Exception as e:
+        print(f"Error in api_wykaz_zablokowanych_by_part: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @placeholder_bp.route('/wykaz-zablokowanych/boxes/<nr_niezgodnosci>')
 def get_blocked_boxes(nr_niezgodnosci):
     """Get box details for a specific NC number."""
@@ -189,6 +229,7 @@ def dane_selekcji():
         'data_nc': request.args.get('filter_data_nc', ''),
         'commessa': request.args.get('filter_commessa', ''),
         'kod_detalu': request.args.get('filter_kod_detalu', ''),
+        'opis_niezgodnosci': request.args.get('filter_opis_niezgodnosci', ''),
         'nr_instrukcji': request.args.get('filter_nr_instrukcji', ''),
         'defekt': request.args.get('filter_defekt', ''),
     }
@@ -222,6 +263,8 @@ def dane_selekcji():
         query = query.filter(DaneRaportu.nr_zamowienia.ilike(f"%{filters['commessa']}%"))
     if filters['kod_detalu']:
         query = query.filter(DaneRaportu.kod_detalu.ilike(f"%{filters['kod_detalu']}%"))
+    if filters['opis_niezgodnosci']:
+        query = query.filter(DaneRaportu.opis_niezgodnosci.ilike(f"%{filters['opis_niezgodnosci']}%"))
     if filters['nr_instrukcji']:
         query = query.filter(DaneRaportu.nr_instrukcji.ilike(f"%{filters['nr_instrukcji']}%"))
     if filters['defekt']:
@@ -231,8 +274,9 @@ def dane_selekcji():
 
     # Apply sorting
     valid_sort_columns = ['data_selekcji', 'nr_raportu', 'nr_niezgodnosci', 'data_niezgodnosci',
-                          'nr_zamowienia', 'kod_detalu', 'nr_instrukcji', 'selekcja_na_biezaco',
-                          'ilosc_detali_sprawdzonych', 'czas_pracy', 'zalecana_wydajnosc']
+                          'nr_zamowienia', 'kod_detalu', 'opis_niezgodnosci', 'nr_instrukcji',
+                          'selekcja_na_biezaco', 'ilosc_detali_sprawdzonych', 'czas_pracy',
+                          'zalecana_wydajnosc']
     if sort_by in valid_sort_columns:
         column = getattr(DaneRaportu, sort_by)
         if order == 'desc':
@@ -272,6 +316,8 @@ def dane_selekcji():
         stats_query = stats_query.filter(DaneRaportu.nr_zamowienia.ilike(f"%{filters['commessa']}%"))
     if filters['kod_detalu']:
         stats_query = stats_query.filter(DaneRaportu.kod_detalu.ilike(f"%{filters['kod_detalu']}%"))
+    if filters['opis_niezgodnosci']:
+        stats_query = stats_query.filter(DaneRaportu.opis_niezgodnosci.ilike(f"%{filters['opis_niezgodnosci']}%"))
     if filters['nr_instrukcji']:
         stats_query = stats_query.filter(DaneRaportu.nr_instrukcji.ilike(f"%{filters['nr_instrukcji']}%"))
     if filters['defekt']:
@@ -309,6 +355,8 @@ def dane_selekcji():
         defects_query = defects_query.filter(DaneRaportu.nr_zamowienia.ilike(f"%{filters['commessa']}%"))
     if filters['kod_detalu']:
         defects_query = defects_query.filter(DaneRaportu.kod_detalu.ilike(f"%{filters['kod_detalu']}%"))
+    if filters['opis_niezgodnosci']:
+        defects_query = defects_query.filter(DaneRaportu.opis_niezgodnosci.ilike(f"%{filters['opis_niezgodnosci']}%"))
     if filters['nr_instrukcji']:
         defects_query = defects_query.filter(DaneRaportu.nr_instrukcji.ilike(f"%{filters['nr_instrukcji']}%"))
     if filters['defekt']:
@@ -359,6 +407,7 @@ def dane_selekcji():
                     report.data_niezgodnosci = data.get('data_niezgodnosci')
                     report.nr_zamowienia = data.get('nr_zamowienia')
                     report.kod_detalu = data.get('kod_detalu')
+                    report.opis_niezgodnosci = data.get('opis_niezgodnosci', '')
 
             db.session.commit()
         except Exception as e:
@@ -429,6 +478,7 @@ def api_dane_selekcji():
         'data_nc': request.args.get('filter_data_nc', ''),
         'commessa': request.args.get('filter_commessa', ''),
         'kod_detalu': request.args.get('filter_kod_detalu', ''),
+        'opis_niezgodnosci': request.args.get('filter_opis_niezgodnosci', ''),
         'nr_instrukcji': request.args.get('filter_nr_instrukcji', ''),
         'defekt': request.args.get('filter_defekt', ''),
     }
@@ -462,6 +512,8 @@ def api_dane_selekcji():
         query = query.filter(DaneRaportu.nr_zamowienia.ilike(f"%{filters['commessa']}%"))
     if filters['kod_detalu']:
         query = query.filter(DaneRaportu.kod_detalu.ilike(f"%{filters['kod_detalu']}%"))
+    if filters['opis_niezgodnosci']:
+        query = query.filter(DaneRaportu.opis_niezgodnosci.ilike(f"%{filters['opis_niezgodnosci']}%"))
     if filters['nr_instrukcji']:
         query = query.filter(DaneRaportu.nr_instrukcji.ilike(f"%{filters['nr_instrukcji']}%"))
     if filters['defekt']:
@@ -471,8 +523,9 @@ def api_dane_selekcji():
 
     # Apply sorting
     valid_sort_columns = ['data_selekcji', 'nr_raportu', 'nr_niezgodnosci', 'data_niezgodnosci',
-                          'nr_zamowienia', 'kod_detalu', 'nr_instrukcji', 'selekcja_na_biezaco',
-                          'ilosc_detali_sprawdzonych', 'czas_pracy', 'zalecana_wydajnosc']
+                          'nr_zamowienia', 'kod_detalu', 'opis_niezgodnosci', 'nr_instrukcji',
+                          'selekcja_na_biezaco', 'ilosc_detali_sprawdzonych', 'czas_pracy',
+                          'zalecana_wydajnosc']
     if sort_by in valid_sort_columns:
         column = getattr(DaneRaportu, sort_by)
         if order == 'desc':
@@ -512,6 +565,8 @@ def api_dane_selekcji():
         stats_query = stats_query.filter(DaneRaportu.nr_zamowienia.ilike(f"%{filters['commessa']}%"))
     if filters['kod_detalu']:
         stats_query = stats_query.filter(DaneRaportu.kod_detalu.ilike(f"%{filters['kod_detalu']}%"))
+    if filters['opis_niezgodnosci']:
+        stats_query = stats_query.filter(DaneRaportu.opis_niezgodnosci.ilike(f"%{filters['opis_niezgodnosci']}%"))
     if filters['nr_instrukcji']:
         stats_query = stats_query.filter(DaneRaportu.nr_instrukcji.ilike(f"%{filters['nr_instrukcji']}%"))
     if filters['defekt']:
@@ -549,6 +604,8 @@ def api_dane_selekcji():
         defects_query = defects_query.filter(DaneRaportu.nr_zamowienia.ilike(f"%{filters['commessa']}%"))
     if filters['kod_detalu']:
         defects_query = defects_query.filter(DaneRaportu.kod_detalu.ilike(f"%{filters['kod_detalu']}%"))
+    if filters['opis_niezgodnosci']:
+        defects_query = defects_query.filter(DaneRaportu.opis_niezgodnosci.ilike(f"%{filters['opis_niezgodnosci']}%"))
     if filters['nr_instrukcji']:
         defects_query = defects_query.filter(DaneRaportu.nr_instrukcji.ilike(f"%{filters['nr_instrukcji']}%"))
     if filters['defekt']:
@@ -597,6 +654,7 @@ def api_dane_selekcji():
             'data_niezgodnosci': report.data_niezgodnosci.strftime('%d.%m.%y') if report.data_niezgodnosci else '-',
             'nr_zamowienia': report.nr_zamowienia or '-',
             'kod_detalu': report.kod_detalu or '-',
+            'opis_niezgodnosci': report.opis_niezgodnosci or '-',
             'nr_instrukcji': report.nr_instrukcji or '-',
             'selekcja_na_biezaco': report.selekcja_na_biezaco,
             'ilosc_detali_sprawdzonych': report.ilosc_detali_sprawdzonych,
@@ -630,6 +688,120 @@ def api_dane_selekcji():
     })
 
 
+@placeholder_bp.route('/api/nc-history/<nr_niezgodnosci>')
+def api_nc_history(nr_niezgodnosci):
+    """AJAX endpoint: NC history entries + blocked parts summary for a given NC number."""
+    try:
+        from MOSYS_data_functions import (
+            get_nc_history,
+            get_batch_niezgodnosc_details,
+            get_all_blocked_parts,
+        )
+
+        # 1. NC history entries
+        history = get_nc_history(nr_niezgodnosci)
+        history_data = []
+        for entry in history:
+            data_wpisu = entry.get('data_wpisu')
+            history_data.append({
+                'data_wpisu': data_wpisu.strftime('%d.%m.%Y') if data_wpisu else '-',
+                'godzina_wpisu': entry.get('godzina_wpisu') or '-',
+                'tekst_wpisu': entry.get('tekst_wpisu') or '',
+                'typ_uwagi': entry.get('typ_uwagi') or '',
+            })
+
+        # 2. Resolve kod_detalu (part code) for this NC
+        details = get_batch_niezgodnosc_details([nr_niezgodnosci])
+        nc_detail = details.get(nr_niezgodnosci, {})
+        kod_detalu = nc_detail.get('kod_detalu') or ''
+
+        # 3. All blocked NCs for the same part code
+        nr_zamowienia = nc_detail.get('nr_zamowienia') or ''
+        related_blocked = []
+        if kod_detalu:
+            all_blocked = get_all_blocked_parts()
+            for part in all_blocked:
+                if (part.get('kod_detalu') or '').strip() == kod_detalu.strip():
+                    data_nc = part.get('data_niezgodnosci')
+                    related_blocked.append({
+                        'nr_niezgodnosci': str(part.get('nr_niezgodnosci') or ''),
+                        'data_niezgodnosci': data_nc.strftime('%d.%m.%Y') if data_nc else '-',
+                        'opis_niezgodnosci': part.get('opis_niezgodnosci') or '-',
+                        'ilosc_zablokowanych': part.get('ilosc_zablokowanych') or 0,
+                    })
+            related_blocked.sort(key=lambda x: x['nr_niezgodnosci'], reverse=True)
+
+        # 4. Sorting activity summary from SQLite grouped by NC for this nr_zamowienia
+        sorting_rows = []
+        sorting_sum_sorted = 0
+        sorting_sum_nok = 0
+        sorting_sum_hours = 0.0
+
+        if nr_zamowienia:
+            reports = DaneRaportu.query.options(
+                joinedload(DaneRaportu.braki_defekty)
+            ).filter(DaneRaportu.nr_zamowienia == nr_zamowienia).all()
+
+            # Group by nr_niezgodnosci, accumulate per-NC totals
+            nc_groups = {}
+            for r in reports:
+                nc_key = r.nr_niezgodnosci or '-'
+                if nc_key not in nc_groups:
+                    nc_groups[nc_key] = {
+                        'nr_niezgodnosci': nc_key,
+                        'data_niezgodnosci': r.data_niezgodnosci,
+                        'total_sorted': 0,
+                        'total_nok': 0,
+                        'total_hours': 0.0,
+                    }
+                g = nc_groups[nc_key]
+                g['total_sorted'] += r.ilosc_detali_sprawdzonych or 0
+                g['total_nok'] += r.total_defects
+                g['total_hours'] += r.czas_pracy or 0.0
+
+            for g in sorted(nc_groups.values(), key=lambda x: x['nr_niezgodnosci'], reverse=True):
+                scrap = (g['total_nok'] / g['total_sorted'] * 100) if g['total_sorted'] > 0 else None
+                wydajnosc = (g['total_sorted'] / g['total_hours']) if g['total_hours'] > 0 else None
+                data_nc = g['data_niezgodnosci']
+                sorting_rows.append({
+                    'nr_niezgodnosci': g['nr_niezgodnosci'],
+                    'data_niezgodnosci': data_nc.strftime('%d.%m.%Y') if data_nc else '-',
+                    'total_sorted': g['total_sorted'],
+                    'total_nok': g['total_nok'],
+                    'scrap_rate': round(scrap, 1) if scrap is not None else None,
+                    'wydajnosc': round(wydajnosc) if wydajnosc is not None else None,
+                })
+                sorting_sum_sorted += g['total_sorted']
+                sorting_sum_nok += g['total_nok']
+                sorting_sum_hours += g['total_hours']
+
+        sorting_summary = {
+            'total_sorted': sorting_sum_sorted,
+            'total_nok': sorting_sum_nok,
+            'scrap_rate': round(sorting_sum_nok / sorting_sum_sorted * 100, 1) if sorting_sum_sorted > 0 else None,
+            'wydajnosc': round(sorting_sum_sorted / sorting_sum_hours) if sorting_sum_hours > 0 else None,
+        }
+
+        return jsonify({
+            'success': True,
+            'nr_niezgodnosci': nr_niezgodnosci,
+            'history': history_data,
+            'blocked': {
+                'kod_detalu': kod_detalu,
+                'related_ncs': related_blocked,
+                'total_blocked_for_pn': sum(r['ilosc_zablokowanych'] for r in related_blocked),
+            },
+            'sorting': {
+                'nr_zamowienia': nr_zamowienia,
+                'rows': sorting_rows,
+                'summary': sorting_summary,
+            },
+        })
+    except Exception as e:
+        print(f"Error fetching NC history for {nr_niezgodnosci}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @placeholder_bp.route('/analiza-danych')
 def analiza_danych():
     """Analiza danych - under construction."""
@@ -652,6 +824,53 @@ def utrzymanie_form():
 def kontrola_jakosci():
     """Kontrola jakości - under construction."""
     return render_template('placeholder/kontrola_jakosci.html')
+
+
+@placeholder_bp.route('/admin/backfill-opis', methods=['POST'])
+def admin_backfill_opis():
+    """One-time backfill: fetch opis_niezgodnosci from MOSYS for all records where it is NULL/empty."""
+    try:
+        from MOSYS_data_functions import get_batch_niezgodnosc_details
+
+        records = DaneRaportu.query.filter(
+            DaneRaportu.nr_niezgodnosci.isnot(None),
+            DaneRaportu.nr_niezgodnosci != '',
+            db.or_(
+                DaneRaportu.opis_niezgodnosci.is_(None),
+                DaneRaportu.opis_niezgodnosci == ''
+            )
+        ).all()
+
+        total = len(records)
+        updated = 0
+        skipped = 0
+        BATCH = 50
+
+        for i in range(0, total, BATCH):
+            batch = records[i:i + BATCH]
+            nr_list = [r.nr_niezgodnosci for r in batch]
+            mosys_data = get_batch_niezgodnosc_details(nr_list)
+
+            for report in batch:
+                detail = mosys_data.get(report.nr_niezgodnosci)
+                if detail and detail.get('opis_niezgodnosci'):
+                    report.opis_niezgodnosci = detail['opis_niezgodnosci']
+                    updated += 1
+                else:
+                    skipped += 1
+
+            db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'total_candidates': total,
+            'updated': updated,
+            'skipped': skipped,
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Backfill opis_niezgodnosci failed: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @placeholder_bp.route('/admin/sync-excel', methods=['POST'])
