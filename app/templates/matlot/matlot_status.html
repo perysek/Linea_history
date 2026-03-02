@@ -1,0 +1,425 @@
+{% extends 'base.html' %}
+
+{% block title %}Kontrola certyfikatów materiałowych - LINEA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
+<style>
+    .row-past-due td {
+        background: #fef2f2 !important;
+        color: #991b1b;
+    }
+    .row-past-due td .badge-giorni {
+        background: #fca5a5;
+        color: #7f1d1d;
+    }
+    .row-warning td {
+        background: #fffbeb !important;
+    }
+    .row-warning td .badge-giorni {
+        background: #fde68a;
+        color: #78350f;
+    }
+    .row-released td {
+        background: #f0fdf4 !important;
+        color: #166534;
+    }
+    .badge-giorni {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.625rem;
+        font-weight: 600;
+        background: #e2e8f0;
+        color: #475569;
+        white-space: nowrap;
+    }
+    .badge-released {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.625rem;
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        border: 1px solid #16a34a;
+        border-radius: 4px;
+        background: #dcfce7;
+        color: #15803d;
+        white-space: nowrap;
+    }
+    .btn-release {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.625rem;
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        border: 1px solid #16a34a;
+        border-radius: 4px;
+        background: #f0fdf4;
+        color: #16a34a;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+    }
+    .btn-release:hover {
+        background: #16a34a;
+        color: white;
+    }
+    .btn-release:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .past-due-pill {
+        background: #fee2e2;
+        color: #991b1b;
+        border-color: #fecaca;
+    }
+
+    /* Category toggle */
+    .category-toggle {
+        display: inline-flex;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .cat-btn {
+        padding: 0.3rem 0.875rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        background: white;
+        color: var(--color-ink-muted);
+        border: none;
+        border-right: 1px solid var(--color-border);
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+    }
+    .cat-btn:last-child {
+        border-right: none;
+    }
+    .cat-btn.active {
+        background: var(--color-ink);
+        color: white;
+    }
+    .cat-btn:not(.active):hover {
+        background: var(--color-surface);
+        color: var(--color-ink);
+    }
+
+    /* Release modal extras */
+    .modal-form-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        margin-bottom: 1rem;
+    }
+    .modal-form-label {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--color-ink-subtle);
+    }
+    .modal-form-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-ink);
+    }
+    .modal-uwagi-input {
+        width: 100%;
+        padding: 0.5rem 0.625rem;
+        font-size: 0.875rem;
+        font-family: inherit;
+        border: 1px solid var(--color-border);
+        border-radius: 4px;
+        resize: vertical;
+        min-height: 72px;
+        box-sizing: border-box;
+        color: var(--color-ink);
+        transition: border-color 0.15s;
+    }
+    .modal-uwagi-input:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.12);
+    }
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        border-top: 0.25px solid var(--color-border);
+        flex-shrink: 0;
+    }
+    .btn-modal-cancel {
+        padding: 0.45rem 1rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        border: 1px solid var(--color-border);
+        border-radius: 4px;
+        background: white;
+        color: var(--color-ink-muted);
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .btn-modal-cancel:hover {
+        background: var(--color-surface);
+    }
+    .btn-modal-confirm {
+        padding: 0.45rem 1.125rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        border: 1px solid #16a34a;
+        border-radius: 4px;
+        background: #16a34a;
+        color: white;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-modal-confirm:hover {
+        background: #15803d;
+    }
+    .btn-modal-confirm:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="refined-page fade-in">
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1 class="page-title">Kontrola certyfikatów materiałowych</h1>
+    </header>
+
+    <!-- Filters & Summary -->
+    <div class="filters-container" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <div class="filter-pills">
+            <span class="filter-pill active" id="row-count">0 pozycji</span>
+            <span class="filter-pill past-due-pill" id="past-due-pill" style="display: none;">
+                0 po terminie
+            </span>
+        </div>
+
+        <!-- Category toggle (Surowce / Inserty) -->
+        <div class="category-toggle">
+            <button class="cat-btn active" id="cat-all"     onclick="setCategory('')">Wszystkie</button>
+            <button class="cat-btn"        id="cat-surowce" onclick="setCategory('surowce')">Surowce</button>
+            <button class="cat-btn"        id="cat-inserty" onclick="setCategory('inserty')">Inserty</button>
+        </div>
+
+        <!-- Status toggle (Oczekujące / Zatwierdzone / Wszystkie) -->
+        <div class="category-toggle" style="margin-left: auto;">
+            <button class="cat-btn active" id="stat-pending"  onclick="setStatus('N')">Oczekujące</button>
+            <button class="cat-btn"        id="stat-released" onclick="setStatus('S')">Zatwierdzone</button>
+            <button class="cat-btn"        id="stat-all"      onclick="setStatus('ALL')">Wszystkie</button>
+        </div>
+
+        <!-- Refresh MOSYS button -->
+        <button type="button" id="btn-refresh-mosys" onclick="syncFromMosys()"
+                style="display: inline-flex; align-items: center; gap: 0.375rem;
+                       padding: 0.3rem 0.875rem; font-size: 0.75rem; font-weight: 500;
+                       border: 1px solid var(--color-border); border-radius: 6px;
+                       background: white; color: var(--color-ink-muted); cursor: pointer;
+                       transition: background 0.15s;">
+            <svg id="refresh-spin-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                 style="transition: transform 0.3s;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Odśwież MOSYS
+        </button>
+        <span id="sync-timestamp" style="font-size: 0.6875rem; color: var(--color-ink-muted);"></span>
+
+        <!-- Clear Filters Button -->
+        <button type="button" class="btn-clear-filters" id="btn-clear-filters"
+                onclick="clearAllFilters()" style="display: none;">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Usuń filtry
+        </button>
+    </div>
+
+    <!-- Table Container -->
+    <div class="table-container">
+        <div class="table-scroll-wrapper">
+            <!-- Fixed Header — 8 columns -->
+            <table class="refined-table" style="flex-shrink: 0;">
+                <colgroup>
+                    <col style="width: 20%;">  <!-- Kod materiału -->
+                    <col style="width: 12%;">  <!-- Nr partii -->
+                    <col style="width: 9%;">   <!-- Ilość -->
+                    <col style="width: 12%;">  <!-- Lokalizacja -->
+                    <col style="width: 10%;">  <!-- Zarejestrowano -->
+                    <col style="width: 10%;">  <!-- Zwolniono -->
+                    <col style="width: 9%;">   <!-- Dni oczek. -->
+                    <col style="width: 18%;">  <!-- Akcja -->
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortTable('CODICE_MATERIALE')" style="cursor: pointer;">
+                                    <span>Kod materiału</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="CODICE_MATERIALE">
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortTable('LOTTO')" style="cursor: pointer;">
+                                    <span>Nr partii</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="LOTTO">
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortTable('GIACENZA_LOTTO')" style="cursor: pointer;">
+                                    <span style="text-align: right;">Ilość</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortTable('BOX')" style="cursor: pointer;">
+                                    <span>Lokalizacja</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                                <input type="text" class="column-search" placeholder="Szukaj..." data-column="BOX">
+                            </div>
+                        </th>
+                        <th>
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Zarejestrowano</span>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Zwolniono</span>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortTable('GIORNI')" style="cursor: pointer;">
+                                    <span style="text-align: right;">Dni oczek.</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Akcja</span>
+                                </div>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+            </table>
+
+            <!-- Scrollable Body -->
+            <div class="tbody-scroll">
+                <table class="refined-table">
+                    <colgroup>
+                        <col style="width: 20%;">
+                        <col style="width: 12%;">
+                        <col style="width: 9%;">
+                        <col style="width: 12%;">
+                        <col style="width: 10%;">
+                        <col style="width: 10%;">
+                        <col style="width: 9%;">
+                        <col style="width: 18%;">
+                    </colgroup>
+                    <tbody id="matlot-tbody">
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
+                                Ładowanie...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-bar">
+            <span class="pagination-info">
+                Wyświetlono <span class="pagination-count" id="visible-count">0</span>
+                z <span class="pagination-count" id="total-count">0</span> rekordów
+            </span>
+            <span class="scroll-loading-indicator" id="scroll-loading-indicator">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Ładowanie kolejnych rekordów...
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Release confirmation modal -->
+<div id="release-modal" class="modal-overlay" onclick="closeReleaseModalOnBackdrop(event)">
+    <div class="modal-container" style="width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">Zatwierdzenie certyfikatu</h2>
+                <p class="modal-subtitle">Partia: <span id="release-modal-label"></span></p>
+            </div>
+            <button class="modal-close-btn" onclick="closeReleaseModal()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-form-row">
+                <span class="modal-form-label">Kod materiału</span>
+                <span class="modal-form-value" id="release-modal-codice"></span>
+            </div>
+            <div class="modal-form-row">
+                <span class="modal-form-label">Nr partii</span>
+                <span class="modal-form-value" id="release-modal-lotto"></span>
+            </div>
+            <div class="modal-form-row">
+                <label class="modal-form-label" for="release-uwagi">Uwagi</label>
+                <textarea id="release-uwagi" class="modal-uwagi-input"
+                          placeholder="Opcjonalne uwagi do zatwierdzenia certyfikatu..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-modal-cancel" onclick="closeReleaseModal()">Anuluj</button>
+            <button class="btn-modal-confirm" id="release-confirm-btn" onclick="submitRelease()">
+                Zatwierdź certyfikat
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/matlot_status.js') }}"></script>
+{% endblock %}

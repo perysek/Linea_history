@@ -186,7 +186,7 @@ def get_blocked_parts_qty(nr_niezgodnosci: str) -> int:
 		return 0
 
 	query = '''
-		SELECT SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL_BLOCKED
+		SELECT SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL
 		FROM STAAMPDB.SEGCONF SEGCONF
 		INNER JOIN STAAMPDB.MAGCONF MAGCONF
 			ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
@@ -540,3 +540,92 @@ def get_blocked_boxes_details(nr_niezgodnosci: str) -> list:
 	except Exception as e:
 		print(f"Error fetching blocked boxes details for {nr_niezgodnosci}: {e}")
 		return []
+
+
+# ── MATLOT – incoming raw material inspection ─────────────────────────────────
+
+def get_matlot_batches() -> pd.DataFrame:
+	"""Fetch all MATLOT batches from MOSYS (read-only, no status filtering).
+
+	Release status is managed locally in linea.db (matlot_tracking.release_status).
+	This function returns raw batch metadata only; the workflow status is never
+	read from or written to MOSYS.
+
+	Returns a DataFrame with columns:
+	    CODICE_MATERIALE, LOTTO, GIACENZA_LOTTO, BOX_X, BOX_Y, BOX_Z
+	Returns an empty DataFrame on error.
+	"""
+	query = """
+		SELECT
+			CODICE_MATERIALE,
+			LOTTO,
+			GIACENZA_LOTTO,
+			BOX_X,
+			BOX_Y,
+			BOX_Z
+		FROM STAAMPDB.MATLOT
+		ORDER BY CODICE_MATERIALE, LOTTO
+	"""
+	try:
+		return get_pervasive(query)
+	except Exception as e:
+		print(f"Error fetching MATLOT batches: {e}")
+		return pd.DataFrame()
+
+
+def get_matlot_verified_batches() -> set:
+	"""Return the set of (CODICE_MATERIALE, LOTTO) pairs where LOTTO_VERIFICATO = 'S'.
+
+	Used by _sync_from_mosys drift-correction to detect batches that MOSYS considers
+	released but LINEA's matlot_tracking still has as pending (release_status='N').
+
+	Returns:
+	    set of (codice_materiale, lotto) tuples — empty set on error or no results.
+	"""
+	query = """
+		SELECT CODICE_MATERIALE, LOTTO
+		FROM STAAMPDB.MATLOT
+		WHERE LOTTO_VERIFICATO = 'S'
+	"""
+	try:
+		df = get_pervasive(query)
+		if df.empty:
+			return set()
+		return {
+			(str(r['CODICE_MATERIALE']).strip(), str(r['LOTTO']).strip())
+			for _, r in df.iterrows()
+		}
+	except Exception as e:
+		print(f"Error fetching verified MATLOT batches: {e}")
+		return set()
+
+
+def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: str) -> bool:
+	"""Write release status back to MOSYS MATLOT.LOTTO_VERIFICATO.
+
+	Called as a parallel write alongside the primary SQLite update — the SQLite
+	matlot_tracking.release_status remains the source of truth. This write keeps
+	MOSYS in sync for downstream systems that read LOTTO_VERIFICATO.
+
+	Args:
+	    codice_materiale: raw material code (CODICE_MATERIALE)
+	    lotto:            batch number (LOTTO)
+	    new_status:       new status value (e.g. 'S' for released)
+
+	Returns:
+	    True on success, False on failure (caller should log but not block).
+	"""
+	query = """
+		UPDATE STAAMPDB.MATLOT
+		SET LOTTO_VERIFICATO = ?
+		WHERE CODICE_MATERIALE = ? AND LOTTO = ?
+	"""
+	try:
+		with pervasive_connection(readonly=False) as conn:
+			cursor = conn.cursor()
+			cursor.execute(query, (new_status, codice_materiale, lotto))
+			conn.commit()
+		return True
+	except Exception as e:
+		print(f"Error updating MATLOT.LOTTO_VERIFICATO for {codice_materiale}/{lotto}: {e}")
+		return False
