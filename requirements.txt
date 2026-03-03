@@ -1,5 +1,11 @@
 Flask>=3.0.0
 pyodbc>=5.0.0
 python-dotenv>=1.0.0
-gunicorn>=21.2.0
 SQLAlchemy>=2.0.0
+Flask-SQLAlchemy>=3.0.0
+Flask-Migrate>=4.0.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+waitress>=3.0.0
+# gunicorn is Linux/macOS only - use waitress for Windows Server
+# gunicorn>=21.2.0
