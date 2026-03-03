@@ -545,14 +545,15 @@ def get_blocked_boxes_details(nr_niezgodnosci: str) -> list:
 # ── MATLOT – incoming raw material inspection ─────────────────────────────────
 
 def get_matlot_batches() -> pd.DataFrame:
-	"""Fetch all MATLOT batches from MOSYS (read-only, no status filtering).
+	"""Fetch all MATLOT batches from MOSYS including their current release status.
 
-	Release status is managed locally in linea.db (matlot_tracking.release_status).
-	This function returns raw batch metadata only; the workflow status is never
-	read from or written to MOSYS.
+	MOSYS is read-only from LINEA's perspective. The returned LOTTO_VERIFICATO
+	value is used only when seeding a new row into matlot_tracking — it is never
+	written back to MOSYS during a normal sync.
 
 	Returns a DataFrame with columns:
-	    CODICE_MATERIALE, LOTTO, GIACENZA_LOTTO, BOX_X, BOX_Y, BOX_Z
+	    CODICE_MATERIALE, LOTTO, GIACENZA_LOTTO, BOX_X, BOX_Y, BOX_Z,
+	    LOTTO_VERIFICATO
 	Returns an empty DataFrame on error.
 	"""
 	query = """
@@ -562,7 +563,8 @@ def get_matlot_batches() -> pd.DataFrame:
 			GIACENZA_LOTTO,
 			BOX_X,
 			BOX_Y,
-			BOX_Z
+			BOX_Z,
+			LOTTO_VERIFICATO
 		FROM STAAMPDB.MATLOT
 		ORDER BY CODICE_MATERIALE, LOTTO
 	"""

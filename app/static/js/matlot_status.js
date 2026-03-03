@@ -5,7 +5,7 @@
 
 let currentSort     = { field: 'CODICE_MATERIALE', direction: 'asc' };
 let searchFilters   = {};
-let currentCategory = '';   // '', 'surowce', or 'inserty'
+let currentCategory = 'surowce';   // 'surowce' or 'inserty'
 let currentStatus   = 'N';  // 'N' (pending), 'S' (released), or 'ALL'
 let allRecords      = [];
 let isLoading       = false;
@@ -59,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function setCategory(cat) {
     currentCategory = cat;
-    document.getElementById('cat-all').classList.toggle('active',     cat === '');
     document.getElementById('cat-surowce').classList.toggle('active', cat === 'surowce');
     document.getElementById('cat-inserty').classList.toggle('active', cat === 'inserty');
     fetchRecords(true);
@@ -230,7 +229,7 @@ function buildRowHtml(record) {
                <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
                </svg>
-               Zatwierdź certyfikat
+               Zatwierdź
            </button>`;
 
     return `
@@ -349,7 +348,7 @@ function openReleaseModal(btn, codice, lotto) {
 
     const confirmBtn = document.getElementById('release-confirm-btn');
     confirmBtn.disabled    = false;
-    confirmBtn.textContent = 'Zatwierdź certyfikat';
+    confirmBtn.textContent = 'Zatwierdź';
 
     document.getElementById('release-modal').classList.add('active');
     setTimeout(() => document.getElementById('release-uwagi').focus(), 100);
@@ -400,13 +399,13 @@ async function submitRelease() {
         } else {
             alert(`Błąd: ${data.error || 'Nie udało się zaktualizować statusu.'}`);
             confirmBtn.disabled    = false;
-            confirmBtn.textContent = 'Zatwierdź certyfikat';
+            confirmBtn.textContent = 'Zatwierdź';
         }
     } catch (err) {
         console.error('Error releasing MATLOT row:', err);
         alert('Błąd połączenia — nie udało się zaktualizować statusu.');
         confirmBtn.disabled    = false;
-        confirmBtn.textContent = 'Zatwierdź certyfikat';
+        confirmBtn.textContent = 'Zatwierdź';
     }
 }
 

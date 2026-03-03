@@ -194,7 +194,7 @@
 <div class="refined-page fade-in">
     <!-- Page Header -->
     <header class="page-header">
-        <h1 class="page-title">Kontrola certyfikatów materiałowych</h1>
+        <h1 class="page-title">Raw materials incoming inspection</h1>
     </header>
 
     <!-- Filters & Summary -->
@@ -208,8 +208,7 @@
 
         <!-- Category toggle (Surowce / Inserty) -->
         <div class="category-toggle">
-            <button class="cat-btn active" id="cat-all"     onclick="setCategory('')">Wszystkie</button>
-            <button class="cat-btn"        id="cat-surowce" onclick="setCategory('surowce')">Surowce</button>
+            <button class="cat-btn active" id="cat-surowce" onclick="setCategory('surowce')">Surowce</button>
             <button class="cat-btn"        id="cat-inserty" onclick="setCategory('inserty')">Inserty</button>
         </div>
 
@@ -253,13 +252,13 @@
             <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
                     <col style="width: 20%;">  <!-- Kod materiału -->
-                    <col style="width: 12%;">  <!-- Nr partii -->
+                    <col style="width: 20%;">  <!-- Nr partii -->
                     <col style="width: 9%;">   <!-- Ilość -->
                     <col style="width: 12%;">  <!-- Lokalizacja -->
                     <col style="width: 10%;">  <!-- Zarejestrowano -->
                     <col style="width: 10%;">  <!-- Zwolniono -->
                     <col style="width: 9%;">   <!-- Dni oczek. -->
-                    <col style="width: 18%;">  <!-- Akcja -->
+                    <col style="width: 10%;">  <!-- Akcja -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -306,17 +305,23 @@
                                 <input type="text" class="column-search" placeholder="Szukaj..." data-column="BOX">
                             </div>
                         </th>
-                        <th>
+                        <th class="sortable">
                             <div class="th-content">
-                                <div class="th-header">
+                                <div class="th-header" onclick="sortTable('PRIMA_VISTA')" style="cursor: pointer;">
                                     <span>Zarejestrowano</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
                                 </div>
                             </div>
                         </th>
-                        <th>
+                        <th class="sortable">
                             <div class="th-content">
-                                <div class="th-header">
+                                <div class="th-header" onclick="sortTable('RELEASED_AT')" style="cursor: pointer;">
                                     <span>Zwolniono</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
                                 </div>
                             </div>
                         </th>
@@ -346,13 +351,13 @@
                 <table class="refined-table">
                     <colgroup>
                         <col style="width: 20%;">
-                        <col style="width: 12%;">
+                        <col style="width: 20%;">
                         <col style="width: 9%;">
                         <col style="width: 12%;">
                         <col style="width: 10%;">
                         <col style="width: 10%;">
                         <col style="width: 9%;">
-                        <col style="width: 18%;">
+                        <col style="width: 10%;">
                     </colgroup>
                     <tbody id="matlot-tbody">
                         <tr>

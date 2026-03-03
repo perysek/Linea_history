@@ -22,18 +22,26 @@ VALID_SORT_FIELDS = {
     'GIACENZA_LOTTO':   'giacenza_lotto',
     'BOX':              'box',
     'GIORNI':           'giorni',
+    'PRIMA_VISTA':      'prima_vista',
+    'RELEASED_AT':      'released_at',
 }
 
 
 def _sync_from_mosys():
     """Fetch all MATLOT batches from MOSYS and upsert into matlot_tracking.
 
-    Creates new tracking rows (release_status='N') for unseen batches and
-    updates the cached giacenza_lotto + box columns on existing rows.
-    Never overwrites release_status or released_at.
+    New rows (not yet in SQLite) are seeded with the actual LOTTO_VERIFICATO
+    value from MOSYS, so pre-existing released batches are imported as 'S'
+    and pre-existing pending batches as 'N'. This treats all current MOSYS
+    rows as "already known" on first sync and avoids false new-batch alerts.
+
+    Existing rows: only giacenza_lotto and box are refreshed.
+    release_status and released_at are never overwritten.
+
+    MOSYS is read-only — this function never writes back to MOSYS.
 
     Cleanup rule: tracking rows that are gone from MOSYS AND already released
-    are deleted (they're fully processed). Pending rows absent from MOSYS are
+    are deleted (fully processed). Pending rows absent from MOSYS are
     preserved to handle sync lag.
 
     Returns:
@@ -77,31 +85,25 @@ def _sync_from_mosys():
             ).first()
 
             if tracking is None:
+                # Seed with MOSYS's actual status so pre-existing released
+                # batches don't appear as new pending items.
+                mosys_status = str(row.get('LOTTO_VERIFICATO') or '').strip()
+                release_status = mosys_status if mosys_status in ('N', 'S') else 'N'
+
                 tracking = MatlotTracking(
                     codice_materiale=codice,
                     lotto=lotto,
                     prima_vista=today,
-                    release_status='N',
+                    release_status=release_status,
                     giacenza_lotto=giacenza,
                     box=box,
                 )
                 db.session.add(tracking)
-                # Best-effort: mark the MOSYS row as pending ('N') the moment LINEA
-                # first sees the batch, so downstream systems reading LOTTO_VERIFICATO
-                # are never left in an undefined state.
-                try:
-                    from MOSYS_data_functions import update_matlot_lotto_status
-                    ok = update_matlot_lotto_status(codice, lotto, 'N')
-                    if not ok:
-                        current_app.logger.warning(
-                            f"MATLOT new-batch MOSYS write failed for {codice}/{lotto}"
-                        )
-                except Exception as _mosys_err:
-                    current_app.logger.warning(
-                        f"MATLOT new-batch MOSYS write exception for {codice}/{lotto}: {_mosys_err}"
-                    )
+                current_app.logger.info(
+                    f"MATLOT new batch: {codice}/{lotto} → release_status='{release_status}'"
+                )
             else:
-                # Refresh cached metadata; leave release_status / released_at intact
+                # Refresh cached metadata only; never touch release_status/released_at
                 tracking.giacenza_lotto = giacenza
                 tracking.box = box
 
@@ -112,34 +114,6 @@ def _sync_from_mosys():
         msg = f"SQLite commit error: {e}"
         current_app.logger.error(f"MATLOT _sync_from_mosys: {msg}")
         return 0, msg
-
-    # Drift correction: reset MOSYS rows that are marked 'S' but LINEA still
-    # considers pending (release_status='N'). This repairs any drift caused by
-    # external writes to LOTTO_VERIFICATO that bypassed LINEA's release flow.
-    try:
-        from MOSYS_data_functions import (
-            get_matlot_verified_batches,
-            update_matlot_lotto_status,
-        )
-        mosys_verified = get_matlot_verified_batches()
-        if mosys_verified:
-            local_released = {
-                (t.codice_materiale, t.lotto)
-                for t in MatlotTracking.query.filter_by(release_status='S').all()
-            }
-            drift = mosys_verified - local_released
-            for codice_d, lotto_d in drift:
-                ok = update_matlot_lotto_status(codice_d, lotto_d, 'N')
-                if not ok:
-                    current_app.logger.warning(
-                        f"MATLOT drift reset failed for {codice_d}/{lotto_d}"
-                    )
-                else:
-                    current_app.logger.info(
-                        f"MATLOT drift corrected: reset {codice_d}/{lotto_d} → 'N'"
-                    )
-    except Exception as _drift_err:
-        current_app.logger.warning(f"MATLOT drift correction error: {_drift_err}")
 
     # Remove fully-processed rows that are no longer in MOSYS
     _cleanup_tracking(mosys_keys)
