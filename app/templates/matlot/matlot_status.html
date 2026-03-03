@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Kontrola certyfikatów materiałowych - LINEA{% endblock %}
+{% block title %}Incoming inspection materiałów bezpośrednich{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
@@ -187,6 +187,95 @@
         opacity: 0.5;
         cursor: not-allowed;
     }
+
+    /* Danger variant for withdrawal confirm button */
+    .btn-modal-confirm-danger {
+        padding: 0.45rem 1.125rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        border: 1px solid #dc2626;
+        border-radius: 4px;
+        background: #dc2626;
+        color: white;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-modal-confirm-danger:hover {
+        background: #b91c1c;
+    }
+    .btn-modal-confirm-danger:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Uwagi edit icon button — shown in every action cell */
+    .btn-edit-uwagi {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        padding: 0;
+        border: 1px solid var(--color-border);
+        border-radius: 4px;
+        background: white;
+        color: var(--color-ink-muted);
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        flex-shrink: 0;
+    }
+    .btn-edit-uwagi:hover {
+        background: var(--color-surface);
+        color: var(--color-ink);
+    }
+
+    /* Bulk-release button inside Akcja column header */
+    .btn-bulk-release {
+        display: block;
+        width: 100%;
+        padding: 0.2rem 0.25rem;
+        font-size: 0.5625rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border: 1px solid #16a34a;
+        border-radius: 3px;
+        background: #f0fdf4;
+        color: #16a34a;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        box-sizing: border-box;
+    }
+    .btn-bulk-release:hover:not(:disabled) {
+        background: #16a34a;
+        color: white;
+    }
+    .btn-bulk-release:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        border-color: var(--color-border);
+        color: var(--color-ink-muted);
+        background: white;
+    }
+
+    /* Wrap long th labels at word boundaries (e.g. "Data zatwierdzenia") */
+    .th-label-wrap {
+        white-space: normal;
+        word-break: break-word;
+        line-height: 1.25;
+    }
+
+    /* Make released badge clickable (withdrawal trigger) */
+    .badge-released {
+        cursor: pointer;
+    }
+    .badge-released:hover {
+        background: #bbf7d0;
+        border-color: #15803d;
+    }
 </style>
 {% endblock %}
 
@@ -248,16 +337,17 @@
     <!-- Table Container -->
     <div class="table-container">
         <div class="table-scroll-wrapper">
-            <!-- Fixed Header — 8 columns -->
+            <!-- Fixed Header — 9 columns -->
             <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
-                    <col style="width: 20%;">  <!-- Kod materiału -->
-                    <col style="width: 20%;">  <!-- Nr partii -->
-                    <col style="width: 9%;">   <!-- Ilość -->
-                    <col style="width: 12%;">  <!-- Lokalizacja -->
-                    <col style="width: 10%;">  <!-- Zarejestrowano -->
-                    <col style="width: 10%;">  <!-- Zwolniono -->
-                    <col style="width: 9%;">   <!-- Dni oczek. -->
+                    <col style="width: 16%;">  <!-- Kod materiału -->
+                    <col style="width: 16%;">  <!-- Nr partii -->
+                    <col style="width: 7%;">   <!-- Ilość -->
+                    <col style="width: 10%;">  <!-- Lokalizacja -->
+                    <col style="width: 8%;">   <!-- Data przyjęcia -->
+                    <col style="width: 8%;">   <!-- Data zatwierdzenia -->
+                    <col style="width: 17%;">  <!-- Uwagi -->
+                    <col style="width: 8%;">   <!-- Dni od przyjęcia -->
                     <col style="width: 10%;">  <!-- Akcja -->
                 </colgroup>
                 <thead>
@@ -308,7 +398,7 @@
                         <th class="sortable">
                             <div class="th-content">
                                 <div class="th-header" onclick="sortTable('PRIMA_VISTA')" style="cursor: pointer;">
-                                    <span>Zarejestrowano</span>
+                                    <span class="th-label-wrap">Data przyjęcia</span>
                                     <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                                     </svg>
@@ -318,17 +408,7 @@
                         <th class="sortable">
                             <div class="th-content">
                                 <div class="th-header" onclick="sortTable('RELEASED_AT')" style="cursor: pointer;">
-                                    <span>Zwolniono</span>
-                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                    </svg>
-                                </div>
-                            </div>
-                        </th>
-                        <th class="sortable">
-                            <div class="th-content">
-                                <div class="th-header" onclick="sortTable('GIORNI')" style="cursor: pointer;">
-                                    <span style="text-align: right;">Dni oczek.</span>
+                                    <span class="th-label-wrap">Data zatwierdzenia</span>
                                     <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                                     </svg>
@@ -338,8 +418,29 @@
                         <th>
                             <div class="th-content">
                                 <div class="th-header">
+                                    <span>Uwagi</span>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="sortable" id="th-giorni">
+                            <div class="th-content">
+                                <div class="th-header" onclick="sortTable('GIORNI')" style="cursor: pointer;">
+                                    <span class="th-label-wrap">Dni od przyjęcia</span>
+                                    <svg class="sort-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </th>
+                        <th style="text-align: center;">
+                            <div class="th-content">
+                                <div class="th-header" style="justify-content: center;">
                                     <span>Akcja</span>
                                 </div>
+                                <button class="btn-bulk-release" id="btn-bulk-release"
+                                        onclick="openBulkReleaseModal()" disabled>
+                                    Zatwierdź wybrane
+                                </button>
                             </div>
                         </th>
                     </tr>
@@ -350,18 +451,19 @@
             <div class="tbody-scroll">
                 <table class="refined-table">
                     <colgroup>
-                        <col style="width: 20%;">
-                        <col style="width: 20%;">
-                        <col style="width: 9%;">
-                        <col style="width: 12%;">
+                        <col style="width: 16%;">
+                        <col style="width: 16%;">
+                        <col style="width: 7%;">
                         <col style="width: 10%;">
-                        <col style="width: 10%;">
-                        <col style="width: 9%;">
+                        <col style="width: 8%;">
+                        <col style="width: 8%;">
+                        <col style="width: 17%;">
+                        <col style="width: 8%;">
                         <col style="width: 10%;">
                     </colgroup>
                     <tbody id="matlot-tbody">
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
+                            <td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
                                 Ładowanie...
                             </td>
                         </tr>
@@ -386,12 +488,12 @@
     </div>
 </div>
 
-<!-- Release confirmation modal -->
+<!-- Release confirmation modal (N → S) -->
 <div id="release-modal" class="modal-overlay" onclick="closeReleaseModalOnBackdrop(event)">
     <div class="modal-container" style="width: 480px;">
         <div class="modal-header">
             <div>
-                <h2 class="modal-title">Zatwierdzenie certyfikatu</h2>
+                <h2 class="modal-title">Zatwierdzenie dostawy</h2>
                 <p class="modal-subtitle">Partia: <span id="release-modal-label"></span></p>
             </div>
             <button class="modal-close-btn" onclick="closeReleaseModal()">
@@ -412,17 +514,119 @@
             <div class="modal-form-row">
                 <label class="modal-form-label" for="release-uwagi">Uwagi</label>
                 <textarea id="release-uwagi" class="modal-uwagi-input"
-                          placeholder="Opcjonalne uwagi do zatwierdzenia certyfikatu..."></textarea>
+                          placeholder="Opcjonalne uwagi do zatwierdzenia dostawy..."></textarea>
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn-modal-cancel" onclick="closeReleaseModal()">Anuluj</button>
             <button class="btn-modal-confirm" id="release-confirm-btn" onclick="submitRelease()">
-                Zatwierdź certyfikat
+                Zatwierdź dostawę
             </button>
         </div>
     </div>
 </div>
+<!-- Withdrawal modal (S → N) — TASK0 -->
+<div id="withdraw-modal" class="modal-overlay" onclick="closeWithdrawModalOnBackdrop(event)">
+    <div class="modal-container" style="width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">Cofnięcie zatwierdzenia</h2>
+                <p class="modal-subtitle">Partia: <span id="withdraw-modal-label"></span></p>
+            </div>
+            <button class="modal-close-btn" onclick="closeWithdrawModal()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-form-row">
+                <span class="modal-form-label">Kod materiału</span>
+                <span class="modal-form-value" id="withdraw-modal-codice"></span>
+            </div>
+            <div class="modal-form-row">
+                <span class="modal-form-label">Nr partii</span>
+                <span class="modal-form-value" id="withdraw-modal-lotto"></span>
+            </div>
+            <div class="modal-form-row">
+                <label class="modal-form-label" for="withdraw-reason">Powód cofnięcia</label>
+                <textarea id="withdraw-reason" class="modal-uwagi-input"
+                          placeholder="Podaj powód cofnięcia zatwierdzenia..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-modal-cancel" onclick="closeWithdrawModal()">Anuluj</button>
+            <button class="btn-modal-confirm-danger" id="withdraw-confirm-btn" onclick="submitWithdraw()">
+                Cofnij zatwierdzenie
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Uwagi edit modal — TASK4 -->
+<div id="uwagi-modal" class="modal-overlay" onclick="closeUwagiModalOnBackdrop(event)">
+    <div class="modal-container" style="width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">Edytuj uwagi</h2>
+                <p class="modal-subtitle">Partia: <span id="uwagi-modal-label"></span></p>
+            </div>
+            <button class="modal-close-btn" onclick="closeUwagiModal()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-form-row">
+                <label class="modal-form-label" for="uwagi-input">Uwagi</label>
+                <textarea id="uwagi-input" class="modal-uwagi-input"
+                          placeholder="Dodaj uwagi..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-modal-cancel" onclick="closeUwagiModal()">Anuluj</button>
+            <button class="btn-modal-confirm" id="uwagi-confirm-btn" onclick="submitUwagi()">
+                Zapisz
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk release modal -->
+<div id="bulk-release-modal" class="modal-overlay" onclick="closeBulkReleaseModalOnBackdrop(event)">
+    <div class="modal-container" style="width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">Zatwierdź wybrane</h2>
+                <p class="modal-subtitle">Dotyczy wszystkich partii pasujących do aktywnych filtrów</p>
+            </div>
+            <button class="modal-close-btn" onclick="closeBulkReleaseModal()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-form-row">
+                <span class="modal-form-label">Liczba partii do zatwierdzenia</span>
+                <span class="modal-form-value" id="bulk-release-count">—</span>
+            </div>
+            <div class="modal-form-row">
+                <label class="modal-form-label" for="bulk-release-uwagi">Uwagi</label>
+                <textarea id="bulk-release-uwagi" class="modal-uwagi-input"
+                          placeholder="Opcjonalne uwagi — zostaną przypisane do każdej zatwierdzonej partii..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-modal-cancel" onclick="closeBulkReleaseModal()">Anuluj</button>
+            <button class="btn-modal-confirm" id="bulk-release-confirm-btn" onclick="submitBulkRelease()">
+                Zatwierdź wybrane
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}

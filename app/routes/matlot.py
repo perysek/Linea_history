@@ -4,7 +4,9 @@ Architecture:
   - matlot_tracking (SQLite) is the source of truth for release_status.
   - MOSYS is fetched on explicit refresh only; batch metadata (giacenza, box)
     is cached in matlot_tracking so the data endpoint reads SQLite exclusively.
-  - On release: SQLite updated first (primary), MOSYS written second (best-effort).
+  - Unique key: (codice_materiale, lotto, box) — TASK3: each MOSYS warehouse
+    location for the same material+lot is a separate tracking row.
+  - On release/withdraw: SQLite updated first (primary), MOSYS written second (best-effort).
 """
 from flask import Blueprint, render_template, jsonify, request, current_app
 from datetime import date, datetime
@@ -30,19 +32,18 @@ VALID_SORT_FIELDS = {
 def _sync_from_mosys():
     """Fetch all MATLOT batches from MOSYS and upsert into matlot_tracking.
 
-    New rows (not yet in SQLite) are seeded with the actual LOTTO_VERIFICATO
-    value from MOSYS, so pre-existing released batches are imported as 'S'
-    and pre-existing pending batches as 'N'. This treats all current MOSYS
-    rows as "already known" on first sync and avoids false new-batch alerts.
+    Unique key is (codice_materiale, lotto, box) — TASK3 fix: the same
+    material+lot can appear in multiple MOSYS warehouse locations (different
+    BOX_X/BOX_Y/BOX_Z); previously only the first row per codice+lotto was
+    tracked because the query used .first() on a (codice, lotto) index.
 
-    Existing rows: only giacenza_lotto and box are refreshed.
-    release_status and released_at are never overwritten.
+    New rows: seeded with the actual LOTTO_VERIFICATO value from MOSYS so
+    pre-existing released batches import as 'S' and pending ones as 'N'.
+    Existing rows: only giacenza_lotto is refreshed; box is part of the key.
+    release_status, released_at, uwagi, withdrawn_at never overwritten.
 
-    MOSYS is read-only — this function never writes back to MOSYS.
-
-    Cleanup rule: tracking rows that are gone from MOSYS AND already released
-    are deleted (fully processed). Pending rows absent from MOSYS are
-    preserved to handle sync lag.
+    Cleanup rule: tracking rows gone from MOSYS AND already released are deleted.
+    Pending rows absent from MOSYS are preserved to handle sync lag.
 
     Returns:
         tuple(int synced_count, str|None error_message)
@@ -56,7 +57,7 @@ def _sync_from_mosys():
         return 0, msg
 
     today = date.today()
-    mosys_keys = set()
+    mosys_keys = set()  # (codice, lotto, box) tuples seen in this sync
 
     if df is not None and not df.empty:
         for _, row in df.iterrows():
@@ -64,8 +65,6 @@ def _sync_from_mosys():
             lotto  = str(row.get('LOTTO') or '').strip()
             if not codice or not lotto:
                 continue
-
-            mosys_keys.add((codice, lotto))
 
             giacenza = row.get('GIACENZA_LOTTO')
             try:
@@ -80,8 +79,11 @@ def _sync_from_mosys():
             ]
             box = '-'.join(p for p in box_parts if p) or '-'
 
+            # TASK3: key now includes box so each warehouse location is distinct
+            mosys_keys.add((codice, lotto, box))
+
             tracking = MatlotTracking.query.filter_by(
-                codice_materiale=codice, lotto=lotto
+                codice_materiale=codice, lotto=lotto, box=box
             ).first()
 
             if tracking is None:
@@ -93,19 +95,18 @@ def _sync_from_mosys():
                 tracking = MatlotTracking(
                     codice_materiale=codice,
                     lotto=lotto,
+                    box=box,
                     prima_vista=today,
                     release_status=release_status,
                     giacenza_lotto=giacenza,
-                    box=box,
                 )
                 db.session.add(tracking)
                 current_app.logger.info(
-                    f"MATLOT new batch: {codice}/{lotto} → release_status='{release_status}'"
+                    f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='{release_status}'"
                 )
             else:
-                # Refresh cached metadata only; never touch release_status/released_at
+                # Refresh cached quantity only; box is the key so it doesn't change
                 tracking.giacenza_lotto = giacenza
-                tracking.box = box
 
     try:
         db.session.commit()
@@ -115,7 +116,6 @@ def _sync_from_mosys():
         current_app.logger.error(f"MATLOT _sync_from_mosys: {msg}")
         return 0, msg
 
-    # Remove fully-processed rows that are no longer in MOSYS
     _cleanup_tracking(mosys_keys)
 
     return len(mosys_keys), None
@@ -124,9 +124,14 @@ def _sync_from_mosys():
 def _get_tracking_rows():
     """Read all matlot_tracking rows from SQLite. No MOSYS call.
 
+    giorni_disabled is computed — True when a 't'-prefix batch has been
+    withdrawn (release_status='N' with withdrawn_at set), so the GIORNI
+    waiting counter does not count time after a withdrawal.
+
     Returns a list of dicts with keys:
         codice_materiale, lotto, giacenza_lotto, box, prima_vista,
-        giorni, is_past_due, release_status, released_at
+        giorni, giorni_disabled, is_past_due, release_status, released_at,
+        withdrawn_at, withdrawal_reason, uwagi
     """
     today = date.today()
     rows = MatlotTracking.query.all()
@@ -138,6 +143,16 @@ def _get_tracking_rows():
             t.released_at.strftime('%d.%m.%Y %H:%M')
             if t.released_at else ''
         )
+        withdrawn_at_str = (
+            t.withdrawn_at.strftime('%d.%m.%Y %H:%M')
+            if t.withdrawn_at else ''
+        )
+        # Disable GIORNI counter for any withdrawn row (S→N reversal).
+        # No codice prefix restriction — any withdrawn batch stops counting wait days.
+        giorni_disabled = (
+            t.release_status == 'N'
+            and t.withdrawn_at is not None
+        )
         result.append({
             'codice_materiale': t.codice_materiale,
             'lotto':            t.lotto,
@@ -145,19 +160,28 @@ def _get_tracking_rows():
             'box':              t.box or '-',
             'prima_vista':      prima_vista.strftime('%d.%m.%Y'),
             'giorni':           giorni,
-            'is_past_due':      giorni > 2,
+            'giorni_disabled':  giorni_disabled,
+            'is_past_due':      giorni > 2 and not giorni_disabled,
             'release_status':   t.release_status,
             'released_at':      released_at_str,
+            'withdrawn_at':     withdrawn_at_str,
+            'withdrawal_reason': t.withdrawal_reason or '',
+            'uwagi':            t.uwagi or '',
         })
     return result
 
 
 def _cleanup_tracking(active_mosys_keys: set):
-    """Delete tracking rows for batches gone from MOSYS AND already released."""
+    """Delete tracking rows for batches gone from MOSYS AND already released.
+
+    active_mosys_keys is a set of (codice, lotto, box) tuples seen in the
+    latest MOSYS sync.
+    """
     try:
         stale = MatlotTracking.query.all()
         for t in stale:
-            if (t.codice_materiale, t.lotto) not in active_mosys_keys:
+            key = (t.codice_materiale, t.lotto, t.box or '-')
+            if key not in active_mosys_keys:
                 if t.release_status == 'S':
                     db.session.delete(t)
         db.session.commit()
@@ -198,17 +222,14 @@ def api_matlot_refresh():
 
 @matlot_bp.route('/api/matlot-status')
 def api_matlot_status():
-    """Return matlot_tracking rows (SQLite only — no MOSYS call).
-
-    Expects a prior call to /api/matlot-refresh to have synced fresh MOSYS data.
-    """
+    """Return matlot_tracking rows (SQLite only — no MOSYS call)."""
     sort_field = request.args.get('sort', 'CODICE_MATERIALE')
     sort_dir   = request.args.get('dir', 'asc')
     limit      = request.args.get('limit', 100, type=int)
     offset     = request.args.get('offset', 0, type=int)
 
-    category = request.args.get('category', '').strip().lower()  # 'surowce', 'inserty', or ''
-    status   = request.args.get('status', 'N').strip().upper()   # 'N', 'S', or 'ALL'
+    category = request.args.get('category', '').strip().lower()
+    status   = request.args.get('status', 'N').strip().upper()
 
     search = {
         'CODICE_MATERIALE': request.args.get('search_CODICE_MATERIALE', '').lower(),
@@ -219,17 +240,14 @@ def api_matlot_status():
     try:
         rows = _get_tracking_rows()
 
-        # Status filter (ALL / N-pending / S-released)
         if status in ('N', 'S'):
             rows = [r for r in rows if r['release_status'] == status]
 
-        # Category toggle filter
         if category == 'surowce':
             rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
         elif category == 'inserty':
             rows = [r for r in rows if r['codice_materiale'].lower().startswith('i')]
 
-        # Column search filter
         for col, val in search.items():
             if val:
                 key = VALID_SORT_FIELDS.get(col, col.lower())
@@ -238,7 +256,6 @@ def api_matlot_status():
         total_count    = len(rows)
         past_due_count = sum(1 for r in rows if r['is_past_due'])
 
-        # Sort
         sort_key = VALID_SORT_FIELDS.get(sort_field, 'codice_materiale')
         reverse  = sort_dir == 'desc'
         numeric_keys = {'giacenza_lotto', 'giorni'}
@@ -248,7 +265,6 @@ def api_matlot_status():
         else:
             rows.sort(key=lambda r: str(r.get(sort_key) or '').lower(), reverse=reverse)
 
-        # Paginate
         page = rows[offset: offset + limit]
 
         return jsonify({
@@ -268,19 +284,18 @@ def api_matlot_status():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ── API: release ──────────────────────────────────────────────────────────────
+# ── API: release (N → S) ──────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/release', methods=['POST'])
 def api_matlot_release():
-    """Release a batch: update SQLite (primary) then MOSYS (best-effort parallel).
+    """Release a batch: update SQLite (primary) then MOSYS (best-effort).
 
-    SQLite release_status N → S is always committed first. MOSYS
-    LOTTO_VERIFICATO write is attempted afterwards; its failure is logged but
-    does not roll back the SQLite change or fail the request.
+    Requires: codice_materiale, lotto, box (TASK3: box is part of unique key).
     """
     data   = request.get_json(silent=True) or {}
     codice = str(data.get('codice_materiale') or '').strip()
     lotto  = str(data.get('lotto') or '').strip()
+    box    = str(data.get('box') or '').strip() or '-'
     uwagi  = str(data.get('uwagi') or '').strip()
 
     if not codice or not lotto:
@@ -288,7 +303,7 @@ def api_matlot_release():
 
     try:
         tracking = MatlotTracking.query.filter_by(
-            codice_materiale=codice, lotto=lotto
+            codice_materiale=codice, lotto=lotto, box=box
         ).first()
 
         if not tracking:
@@ -297,7 +312,6 @@ def api_matlot_release():
         if tracking.release_status == 'S':
             return jsonify({'success': False, 'error': 'Batch already released'}), 409
 
-        # Primary write: SQLite
         tracking.release_status = 'S'
         tracking.released_at    = datetime.now()
         if uwagi:
@@ -309,17 +323,198 @@ def api_matlot_release():
         current_app.logger.error(f"api_matlot_release SQLite error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-    # Secondary write: MOSYS (best-effort — does not affect the response)
+    # Best-effort MOSYS parallel write
     try:
         from MOSYS_data_functions import update_matlot_lotto_status
         ok = update_matlot_lotto_status(codice, lotto, 'S')
         if not ok:
             current_app.logger.warning(
-                f"MOSYS parallel write failed for {codice}/{lotto} — SQLite already committed"
+                f"MOSYS write failed for release {codice}/{lotto}@{box}"
             )
     except Exception as mosys_err:
         current_app.logger.warning(
-            f"MOSYS parallel write exception for {codice}/{lotto}: {mosys_err}"
+            f"MOSYS write exception for release {codice}/{lotto}@{box}: {mosys_err}"
         )
 
     return jsonify({'success': True})
+
+
+# ── API: withdraw (S → N) — TASK0 ─────────────────────────────────────────────
+
+@matlot_bp.route('/api/matlot-status/withdraw', methods=['POST'])
+def api_matlot_withdraw():
+    """Withdraw a released batch: revert release_status S → N.
+
+    Records withdrawn_at and withdrawal_reason. For batches whose
+    CODICE_MATERIALE starts with 't', giorni_disabled will be True after
+    withdrawal (derived in _get_tracking_rows — no extra column needed).
+
+    Requires: codice_materiale, lotto, box.
+    Optional: withdrawal_reason.
+    """
+    data             = request.get_json(silent=True) or {}
+    codice           = str(data.get('codice_materiale') or '').strip()
+    lotto            = str(data.get('lotto') or '').strip()
+    box              = str(data.get('box') or '').strip() or '-'
+    withdrawal_reason = str(data.get('withdrawal_reason') or '').strip()
+
+    if not codice or not lotto:
+        return jsonify({'success': False, 'error': 'codice_materiale and lotto required'}), 400
+
+    try:
+        tracking = MatlotTracking.query.filter_by(
+            codice_materiale=codice, lotto=lotto, box=box
+        ).first()
+
+        if not tracking:
+            return jsonify({'success': False, 'error': 'Batch not found in tracking'}), 404
+
+        if tracking.release_status == 'N':
+            return jsonify({'success': False, 'error': 'Batch is not released'}), 409
+
+        tracking.release_status   = 'N'
+        tracking.withdrawn_at     = datetime.now()
+        tracking.withdrawal_reason = withdrawal_reason or None
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_withdraw SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Best-effort MOSYS parallel write
+    try:
+        from MOSYS_data_functions import update_matlot_lotto_status
+        ok = update_matlot_lotto_status(codice, lotto, 'N')
+        if not ok:
+            current_app.logger.warning(
+                f"MOSYS write failed for withdrawal {codice}/{lotto}@{box}"
+            )
+    except Exception as mosys_err:
+        current_app.logger.warning(
+            f"MOSYS write exception for withdrawal {codice}/{lotto}@{box}: {mosys_err}"
+        )
+
+    return jsonify({'success': True})
+
+
+# ── API: edit uwagi — TASK4 ───────────────────────────────────────────────────
+
+@matlot_bp.route('/api/matlot-status/uwagi', methods=['POST'])
+def api_matlot_uwagi():
+    """Update the uwagi (notes) field for a tracking row.
+
+    Available regardless of release_status.
+    Requires: codice_materiale, lotto, box.
+    Optional: uwagi (empty string clears the field).
+    """
+    data   = request.get_json(silent=True) or {}
+    codice = str(data.get('codice_materiale') or '').strip()
+    lotto  = str(data.get('lotto') or '').strip()
+    box    = str(data.get('box') or '').strip() or '-'
+    uwagi  = str(data.get('uwagi') or '').strip()
+
+    if not codice or not lotto:
+        return jsonify({'success': False, 'error': 'codice_materiale and lotto required'}), 400
+
+    try:
+        tracking = MatlotTracking.query.filter_by(
+            codice_materiale=codice, lotto=lotto, box=box
+        ).first()
+
+        if not tracking:
+            return jsonify({'success': False, 'error': 'Batch not found in tracking'}), 404
+
+        tracking.uwagi = uwagi or None
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_uwagi SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({'success': True})
+
+
+# ── API: bulk release ─────────────────────────────────────────────────────────
+
+@matlot_bp.route('/api/matlot-status/bulk-release', methods=['POST'])
+def api_matlot_bulk_release():
+    """Release all pending rows that match the client's current search filters.
+
+    The client sends the same filters it uses for display so the server applies
+    them identically — this covers rows not yet loaded by the infinite scroll.
+    Only rows with release_status='N' are affected (pending rows).
+
+    Body JSON:
+        uwagi    — shared note applied to every released row (optional)
+        category — 'surowce' | 'inserty' | '' (same as list endpoint)
+        search   — dict of { 'CODICE_MATERIALE': '...', 'LOTTO': '...', 'BOX': '...' }
+
+    Returns:
+        { success, released_count }
+    """
+    data     = request.get_json(silent=True) or {}
+    uwagi    = str(data.get('uwagi') or '').strip()
+    category = str(data.get('category') or '').strip().lower()
+    search   = data.get('search') or {}
+
+    try:
+        rows = _get_tracking_rows()
+
+        # Only target pending rows
+        rows = [r for r in rows if r['release_status'] == 'N']
+
+        # Same category filter as the list endpoint
+        if category == 'surowce':
+            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+        elif category == 'inserty':
+            rows = [r for r in rows if r['codice_materiale'].lower().startswith('i')]
+
+        # Same column search filter as the list endpoint
+        for col, val in search.items():
+            val = str(val or '').strip().lower()
+            if val:
+                key = VALID_SORT_FIELDS.get(col, col.lower())
+                rows = [r for r in rows if val in str(r.get(key) or '').lower()]
+
+        if not rows:
+            return jsonify({'success': False, 'error': 'Brak pasujących rekordów do zatwierdzenia'}), 404
+
+        now = datetime.now()
+        released_count = 0
+
+        for row in rows:
+            tracking = MatlotTracking.query.filter_by(
+                codice_materiale=row['codice_materiale'],
+                lotto=row['lotto'],
+                box=row['box'],
+            ).first()
+            if tracking and tracking.release_status == 'N':
+                tracking.release_status = 'S'
+                tracking.released_at    = now
+                if uwagi:
+                    tracking.uwagi = uwagi
+                released_count += 1
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_bulk_release SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Best-effort MOSYS writes — one per row, failures logged and ignored
+    try:
+        from MOSYS_data_functions import update_matlot_lotto_status
+        for row in rows:
+            try:
+                update_matlot_lotto_status(row['codice_materiale'], row['lotto'], 'S')
+            except Exception as mosys_err:
+                current_app.logger.warning(
+                    f"MOSYS bulk write failed for {row['codice_materiale']}/{row['lotto']}: {mosys_err}"
+                )
+    except Exception:
+        pass
+
+    return jsonify({'success': True, 'released_count': released_count})

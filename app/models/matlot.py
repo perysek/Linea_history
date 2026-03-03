@@ -9,15 +9,22 @@ class MatlotTracking(db.Model):
     MATLOT in MOSYS has no creation date column, so this table records the
     first time each batch was seen (prima_vista). The release_status column
     replaces MOSYS LOTTO_VERIFICATO as the source of truth for workflow state —
-    MOSYS is never written to; all status changes stay in linea.db.
+    MOSYS is written to only as a best-effort parallel write.
 
     release_status values:
         'N' — pending, awaiting certificate approval
         'S' — released / approved by operator in LINEA
 
+    Unique key: (codice_materiale, lotto, box) — each MOSYS warehouse location
+    for the same material+lot is a distinct tracking row.
+
+    giorni_disabled is derived (not stored): True when a 't'-prefix item has
+    been withdrawn (release_status='N' AND withdrawn_at IS NOT NULL).
+
     Lifecycle:
-        - Row created: first time the MOSYS sync sees this (codice, lotto) pair
-        - release_status N→S: operator approves in LINEA (no MOSYS write)
+        - Row created: first time the MOSYS sync sees this (codice, lotto, box)
+        - release_status N→S: operator approves in LINEA
+        - release_status S→N: operator withdraws — withdrawn_at/withdrawal_reason set
         - Row deleted: batch disappears from MOSYS AND release_status == 'S'
     """
     __tablename__ = 'matlot_tracking'
@@ -26,6 +33,7 @@ class MatlotTracking(db.Model):
     codice_materiale = db.Column(db.String(100), nullable=False)
     lotto = db.Column(db.String(100), nullable=False)
     prima_vista = db.Column(db.Date, nullable=False)
+
     # MOSYS metadata — cached on every sync so data reads never need MOSYS
     giacenza_lotto = db.Column(db.Integer, nullable=True, default=0)
     box = db.Column(db.String(100), nullable=True, default='')
@@ -34,9 +42,15 @@ class MatlotTracking(db.Model):
     released_at = db.Column(db.DateTime, nullable=True)
     uwagi = db.Column(db.String(500), nullable=True)
 
+    # Withdrawal tracking (TASK0)
+    withdrawn_at = db.Column(db.DateTime, nullable=True)
+    withdrawal_reason = db.Column(db.String(500), nullable=True)
+
     __table_args__ = (
-        db.UniqueConstraint('codice_materiale', 'lotto', name='uq_matlot_batch'),
+        # Expanded from (codice_materiale, lotto) to include box (TASK3):
+        # the same material+lot can appear in multiple MOSYS warehouse locations.
+        db.UniqueConstraint('codice_materiale', 'lotto', 'box', name='uq_matlot_batch'),
     )
 
     def __repr__(self):
-        return f'<MatlotTracking {self.codice_materiale}/{self.lotto} since {self.prima_vista}>'
+        return f'<MatlotTracking {self.codice_materiale}/{self.lotto}@{self.box} since {self.prima_vista}>'
