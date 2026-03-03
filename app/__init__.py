@@ -30,12 +30,15 @@ def create_app(config_name='default'):
     # Import models after db initialization
     with app.app_context():
         from app.models import sorting_area  # noqa: F401
+        from app.models import matlot  # noqa: F401
 
     # Register blueprints
     from app.routes.linea import linea_bp
     from app.routes.placeholder import placeholder_bp
+    from app.routes.matlot import matlot_bp
     app.register_blueprint(linea_bp)
     app.register_blueprint(placeholder_bp)
+    app.register_blueprint(matlot_bp)
 
     # Add root redirect
     @app.route('/')

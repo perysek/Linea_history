@@ -91,3 +91,5 @@ class BrakiDefektyRaportu(db.Model):
 
     def __repr__(self):
         return f'<Defekt {self.defekt}: {self.ilosc}>'
+
+

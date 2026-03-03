@@ -186,7 +186,7 @@ def get_blocked_parts_qty(nr_niezgodnosci: str) -> int:
 		return 0
 
 	query = '''
-		SELECT SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL_BLOCKED
+		SELECT SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL
 		FROM STAAMPDB.SEGCONF SEGCONF
 		INNER JOIN STAAMPDB.MAGCONF MAGCONF
 			ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
@@ -540,3 +540,127 @@ def get_blocked_boxes_details(nr_niezgodnosci: str) -> list:
 	except Exception as e:
 		print(f"Error fetching blocked boxes details for {nr_niezgodnosci}: {e}")
 		return []
+
+
+# ── MATLOT – incoming raw material inspection ─────────────────────────────────
+
+def get_matlot_batches() -> pd.DataFrame:
+	"""Fetch all MATLOT batches from MOSYS including their current release status.
+
+	MOSYS is read-only from LINEA's perspective. The returned LOTTO_VERIFICATO
+	value is used only when seeding a new row into matlot_tracking — it is never
+	written back to MOSYS during a normal sync.
+
+	Returns a DataFrame with columns:
+	    CODICE_MATERIALE, LOTTO, GIACENZA_LOTTO, BOX_X, BOX_Y, BOX_Z,
+	    LOTTO_VERIFICATO
+	Returns an empty DataFrame on error.
+	"""
+	query = """
+		SELECT
+			CODICE_MATERIALE,
+			LOTTO,
+			GIACENZA_LOTTO,
+			BOX_X,
+			BOX_Y,
+			BOX_Z,
+			LOTTO_VERIFICATO
+		FROM STAAMPDB.MATLOT
+		ORDER BY CODICE_MATERIALE, LOTTO
+	"""
+	try:
+		return get_pervasive(query)
+	except Exception as e:
+		print(f"Error fetching MATLOT batches: {e}")
+		return pd.DataFrame()
+
+
+def get_matlot_verified_batches() -> set:
+	"""Return the set of (CODICE_MATERIALE, LOTTO) pairs where LOTTO_VERIFICATO = 'S'.
+
+	Used by _sync_from_mosys drift-correction to detect batches that MOSYS considers
+	released but LINEA's matlot_tracking still has as pending (release_status='N').
+
+	Returns:
+	    set of (codice_materiale, lotto) tuples — empty set on error or no results.
+	"""
+	query = """
+		SELECT CODICE_MATERIALE, LOTTO
+		FROM STAAMPDB.MATLOT
+		WHERE LOTTO_VERIFICATO = 'S'
+	"""
+	try:
+		df = get_pervasive(query)
+		if df.empty:
+			return set()
+		return {
+			(str(r['CODICE_MATERIALE']).strip(), str(r['LOTTO']).strip())
+			for _, r in df.iterrows()
+		}
+	except Exception as e:
+		print(f"Error fetching verified MATLOT batches: {e}")
+		return set()
+
+
+def auto_approve_matlot_batches() -> int:
+	"""Bulk-set LOTTO_VERIFICATO='S' in MOSYS for batches matching the auto-approve rule.
+
+	Auto-approve criteria (applied together):
+	    - CODICE_MATERIALE starts with 't' (case-insensitive)
+	    - LOTTO starts with '0AV' OR '0BU'
+	    - Current LOTTO_VERIFICATO = 'N'  (avoids unnecessary writes)
+
+	These batches are auto-released in MOSYS and excluded from the SQLite
+	matlot_tracking table — they are not displayed or tracked in LINEA.
+
+	Returns:
+	    Number of MOSYS rows updated (0 on error or when nothing to update).
+	"""
+	query = """
+		UPDATE STAAMPDB.MATLOT
+		SET LOTTO_VERIFICATO = 'S'
+		WHERE LOTTO_VERIFICATO = 'N'
+		  AND LOWER(CODICE_MATERIALE) LIKE 't%'
+		  AND (LOTTO LIKE '0AV%' OR LOTTO LIKE '0BU%')
+	"""
+	try:
+		with pervasive_connection(readonly=False) as conn:
+			cursor = conn.cursor()
+			cursor.execute(query)
+			count = cursor.rowcount
+			conn.commit()
+		return count
+	except Exception as e:
+		print(f"Error auto-approving MATLOT batches: {e}")
+		return 0
+
+
+def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: str) -> bool:
+	"""Write release status back to MOSYS MATLOT.LOTTO_VERIFICATO.
+
+	Called as a parallel write alongside the primary SQLite update — the SQLite
+	matlot_tracking.release_status remains the source of truth. This write keeps
+	MOSYS in sync for downstream systems that read LOTTO_VERIFICATO.
+
+	Args:
+	    codice_materiale: raw material code (CODICE_MATERIALE)
+	    lotto:            batch number (LOTTO)
+	    new_status:       new status value (e.g. 'S' for released)
+
+	Returns:
+	    True on success, False on failure (caller should log but not block).
+	"""
+	query = """
+		UPDATE STAAMPDB.MATLOT
+		SET LOTTO_VERIFICATO = ?
+		WHERE CODICE_MATERIALE = ? AND LOTTO = ?
+	"""
+	try:
+		with pervasive_connection(readonly=False) as conn:
+			cursor = conn.cursor()
+			cursor.execute(query, (new_status, codice_materiale, lotto))
+			conn.commit()
+		return True
+	except Exception as e:
+		print(f"Error updating MATLOT.LOTTO_VERIFICATO for {codice_materiale}/{lotto}: {e}")
+		return False

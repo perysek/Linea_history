@@ -1,0 +1,743 @@
+/**
+ * matlot_status.js — MATLOT incoming raw material inspection
+ * Follows the same infinite-scroll / sort / search pattern as linea.js
+ */
+
+let currentSort     = { field: 'CODICE_MATERIALE', direction: 'asc' };
+let searchFilters   = {};
+let currentCategory = 'surowce';   // 'surowce' or 'inserty'
+let currentStatus   = 'N';  // 'N' (pending), 'S' (released), or 'ALL'
+let allRecords      = [];
+let isLoading       = false;
+let currentAbortController = null;
+
+// Pagination state
+let currentOffset = 0;
+let totalRecords  = 0;
+const RECORDS_PER_PAGE = 100;
+let hasMoreRecords = false;
+
+// Release modal state
+let _pendingCodice = '';
+let _pendingLotto  = '';
+let _pendingBox    = '';
+let _pendingBtn    = null;
+
+// Initialize on page load — sync from MOSYS first, then display data
+document.addEventListener('DOMContentLoaded', () => {
+    syncFromMosys().then(() => fetchRecords());
+
+    // Infinite scroll on table body
+    const tbodyScroll = document.querySelector('.tbody-scroll');
+    if (tbodyScroll) {
+        tbodyScroll.addEventListener('scroll', () => {
+            if (isLoading || !hasMoreRecords) return;
+            const { scrollTop, scrollHeight, clientHeight } = tbodyScroll;
+            if (scrollTop + clientHeight >= scrollHeight - 100) {
+                currentOffset += RECORDS_PER_PAGE;
+                fetchRecords(false);
+            }
+        });
+    }
+
+    // Setup column search inputs with server-side filtering
+    document.querySelectorAll('.column-search').forEach(input => {
+        input.addEventListener('input', debounce(() => {
+            searchFilters[input.dataset.column] = input.value.trim();
+            applyFilters();
+            updateClearFiltersButton();
+        }, 300));
+    });
+
+    // Close modals on Escape
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            closeReleaseModal();
+            closeWithdrawModal();
+            closeUwagiModal();
+            closeBulkReleaseModal();
+        }
+    });
+
+    // Initial button state (no filters active on load)
+    updateBulkReleaseButton();
+});
+
+/**
+ * Set active material category (Surowce / Inserty) and refetch.
+ * TASK2: toggling to inserty suppresses the GIORNI column header and alert system.
+ */
+function setCategory(cat) {
+    currentCategory = cat;
+    document.getElementById('cat-surowce').classList.toggle('active', cat === 'surowce');
+    document.getElementById('cat-inserty').classList.toggle('active', cat === 'inserty');
+
+    // TASK2: suppress GIORNI column header for inserty (cells handled in buildRowHtml)
+    const thGiorni = document.getElementById('th-giorni');
+    if (thGiorni) {
+        thGiorni.style.opacity       = cat === 'inserty' ? '0' : '';
+        thGiorni.style.pointerEvents = cat === 'inserty' ? 'none' : '';
+    }
+
+    fetchRecords(true);
+}
+
+/**
+ * Set active status view (Oczekujące / Zatwierdzone / Wszystkie) and refetch
+ */
+function setStatus(stat) {
+    currentStatus = stat;
+    document.getElementById('stat-pending').classList.toggle('active',  stat === 'N');
+    document.getElementById('stat-released').classList.toggle('active', stat === 'S');
+    document.getElementById('stat-all').classList.toggle('active',      stat === 'ALL');
+    updateBulkReleaseButton();
+    fetchRecords(true);
+}
+
+/**
+ * POST /api/matlot-refresh — sync MOSYS → SQLite, update timestamp label.
+ * Always resolves (never rejects) so callers can safely chain .then().
+ */
+async function syncFromMosys() {
+    const btn  = document.getElementById('btn-refresh-mosys');
+    const icon = document.getElementById('refresh-spin-icon');
+    const ts   = document.getElementById('sync-timestamp');
+
+    if (btn)  btn.disabled = true;
+    if (icon) icon.style.animation = 'spin 0.8s linear infinite';
+
+    const tbody = document.getElementById('matlot-tbody');
+    if (tbody && allRecords.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Synchronizacja z MOSYS...</td></tr>';
+    }
+
+    try {
+        const response = await fetch('/api/matlot-refresh', { method: 'POST' });
+        const data = await response.json();
+        if (ts) {
+            ts.textContent = data.success
+                ? `Zsynchronizowano: ${data.timestamp} (${data.synced} partii)`
+                : `Błąd synchronizacji: ${data.error || 'nieznany błąd'}`;
+        }
+    } catch (err) {
+        console.error('MOSYS refresh error:', err);
+        if (ts) ts.textContent = 'Błąd połączenia z MOSYS';
+    } finally {
+        if (icon) icon.style.animation = '';
+        if (btn)  btn.disabled = false;
+    }
+}
+
+/**
+ * Fetch records via AJAX with pagination
+ */
+async function fetchRecords(resetOffset = true) {
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+
+    if (resetOffset) {
+        currentOffset = 0;
+        allRecords = [];
+    }
+
+    currentAbortController = new AbortController();
+    isLoading = true;
+
+    const loadingIndicator = document.getElementById('scroll-loading-indicator');
+    if (loadingIndicator && !resetOffset) {
+        loadingIndicator.style.display = 'inline-flex';
+    }
+
+    const tbody = document.getElementById('matlot-tbody');
+    const params = new URLSearchParams();
+
+    params.append('sort', currentSort.field);
+    params.append('dir', currentSort.direction);
+    params.append('status', currentStatus);
+    if (currentCategory) params.append('category', currentCategory);
+
+    Object.entries(searchFilters).forEach(([key, value]) => {
+        if (value) params.append(`search_${key}`, value);
+    });
+
+    params.append('limit', RECORDS_PER_PAGE);
+    params.append('offset', currentOffset);
+
+    if (currentOffset === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">Ładowanie...</td></tr>';
+    }
+
+    try {
+        const response = await fetch(`/api/matlot-status?${params}`, {
+            signal: currentAbortController.signal
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            totalRecords  = data.pagination.total;
+            currentOffset = data.pagination.offset;
+
+            if (resetOffset) {
+                allRecords = data.rows;
+                renderRecordsDirect(allRecords);
+            } else {
+                appendRecordsDirect(data.rows);
+                allRecords = allRecords.concat(data.rows);
+            }
+
+            updateCount(allRecords.length, totalRecords);
+            updateLoadMoreButton(data.pagination);
+            updatePastDuePill(data.past_due_count);
+        } else {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych z MOSYS</td></tr>';
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            // cancelled — new request in progress
+        } else {
+            console.error('Error fetching MATLOT records:', error);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
+                        <p style="font-size: 1rem; font-weight: 500; color: #c33; margin-bottom: 0.5rem;">Błąd połączenia z MOSYS</p>
+                        <p style="font-size: 0.875rem;">Nie udało się pobrać danych o partiach materiałowych.</p>
+                    </td>
+                </tr>`;
+        }
+    } finally {
+        isLoading = false;
+        currentAbortController = null;
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+    }
+}
+
+/**
+ * Build HTML string for a single MATLOT record row (9 columns).
+ *
+ * TASK2: when currentCategory === 'inserty', no alert row classes are applied
+ *        and the GIORNI cell is rendered empty.
+ * TASK0: released badge becomes a withdrawal button; giorni_disabled suppresses
+ *        the waiting counter for any withdrawn row (regardless of codice prefix).
+ * TASK4: every row gets an edit-uwagi icon button.
+ * Uwagi column: withdrawal_reason+withdrawn_at / uwagi (S) / empty (N pending)
+ */
+function buildRowHtml(record) {
+    const isReleased   = record.release_status === 'S';
+    const isInserty    = currentCategory === 'inserty';
+    const giorniHide   = isInserty || record.giorni_disabled;
+
+    // TASK2: no alert row classes for inserty category
+    const rowClass = isInserty
+        ? 'stagger-row'
+        : isReleased
+            ? 'stagger-row row-released'
+            : record.is_past_due
+                ? 'stagger-row row-past-due'
+                : record.giorni >= 2
+                    ? 'stagger-row row-warning'
+                    : 'stagger-row';
+
+    const giorniLabel = record.giorni === 0
+        ? 'dziś'
+        : record.giorni === 1
+            ? '1 dzień'
+            : `${record.giorni} dni`;
+
+    const fmt = n => Number(n).toLocaleString('pl-PL').replace(/,/g, ' ');
+
+    // Escape values for inline onclick attributes (XSS-safe)
+    const co  = escapeAttr(record.codice_materiale);
+    const lo  = escapeAttr(record.lotto);
+    const bo  = escapeAttr(record.box);
+    const uwa = escapeAttr(record.uwagi || '');
+
+    // Uwagi column — 3-way branch based on row state
+    const isWithdrawn = record.release_status === 'N' && record.withdrawn_at;
+    let uwagiCellContent = '';
+    if (isWithdrawn) {
+        const reason = record.withdrawal_reason
+            ? escapeHtml(record.withdrawal_reason)
+            : '<em style="color:var(--color-ink-muted);">brak powodu</em>';
+        uwagiCellContent = `
+            <span style="color:#991b1b; line-height:1.3;">${reason}</span>
+            <span style="display:block; font-size:0.625rem; color:var(--color-ink-muted); margin-top:0.1rem;">
+                cofnięto ${escapeHtml(record.withdrawn_at)}
+            </span>`;
+    } else if (record.release_status === 'S' && record.uwagi) {
+        uwagiCellContent = escapeHtml(record.uwagi);
+    }
+
+    // TASK0: released badge → clickable withdrawal button
+    const primaryAction = isReleased
+        ? `<button class="badge-released"
+                   title="Kliknij, aby cofnąć zatwierdzenie"
+                   onclick="openWithdrawModal(this, '${co}', '${lo}', '${bo}')">
+               <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+               </svg>
+               Zatwierdzony
+           </button>`
+        : `<button class="btn-release"
+                   onclick="openReleaseModal(this, '${co}', '${lo}', '${bo}')">
+               <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+               </svg>
+               Zatwierdź
+           </button>`;
+
+    // TASK4: uwagi edit button — always shown for all rows
+    const editUwagiBtn = `<button class="btn-edit-uwagi" title="Edytuj uwagi"
+                onclick="openUwagiModal(this, '${co}', '${lo}', '${bo}', '${uwa}')">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+            </button>`;
+
+    return `
+        <tr class="${rowClass}"
+            data-codice="${escapeAttr(record.codice_materiale)}"
+            data-lotto="${escapeAttr(record.lotto)}"
+            data-box="${escapeAttr(record.box)}">
+            <td style="font-weight: 500;">${escapeHtml(record.codice_materiale)}</td>
+            <td>${escapeHtml(record.lotto)}</td>
+            <td style="text-align: right; padding-right: 1.5rem; font-weight: 500;">${fmt(record.giacenza_lotto)}</td>
+            <td style="white-space: nowrap;">${escapeHtml(record.box)}</td>
+            <td style="white-space: nowrap;">${escapeHtml(record.prima_vista)}</td>
+            <td style="white-space: nowrap; color: ${isReleased ? '#15803d' : 'var(--color-ink-muted)'};">
+                ${escapeHtml(record.released_at || '—')}
+            </td>
+            <td style="max-width: 0; overflow: hidden; padding-right: 0.5rem;">
+                ${uwagiCellContent}
+            </td>
+            <td style="text-align: center;">
+                ${giorniHide ? '' : `<span class="badge-giorni">${escapeHtml(giorniLabel)}</span>`}
+            </td>
+            <td style="text-align: center;">
+                <div style="display: inline-flex; align-items: center; gap: 0.25rem;">
+                    ${primaryAction}
+                    ${editUwagiBtn}
+                </div>
+            </td>
+        </tr>`;
+}
+
+/**
+ * Render records directly — replaces entire tbody (initial load / sort / filter)
+ */
+function renderRecordsDirect(records) {
+    const tbody = document.getElementById('matlot-tbody');
+
+    if (records.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align: center; padding: 3rem; color: var(--color-ink-muted);">
+                    <p style="font-size: 1.125rem; font-weight: 500;">Brak partii spełniających kryteria</p>
+                    <p style="font-size: 0.875rem; margin-top: 0.25rem;">Zmień filtr lub wybierz inny widok.</p>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = records.map(r => buildRowHtml(r)).join('');
+}
+
+/**
+ * Append new records to tbody — avoids re-rendering existing rows on scroll
+ */
+function appendRecordsDirect(records) {
+    const tbody = document.getElementById('matlot-tbody');
+    tbody.insertAdjacentHTML('beforeend', records.map(r => buildRowHtml(r)).join(''));
+}
+
+/**
+ * Apply filters — refetch from server with new filters
+ */
+function applyFilters() {
+    fetchRecords(true);
+}
+
+/**
+ * Sort table by column
+ */
+function sortTable(field) {
+    if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+    }
+    fetchRecords(true);
+}
+
+/**
+ * Update record count display
+ */
+function updateCount(visible, total) {
+    document.getElementById('visible-count').textContent = visible;
+    document.getElementById('total-count').textContent   = total;
+    document.getElementById('row-count').textContent     = `${total} pozycji`;
+}
+
+/**
+ * Update infinite scroll state
+ */
+function updateLoadMoreButton(pagination) {
+    hasMoreRecords = pagination.has_more;
+}
+
+/**
+ * Show/hide past-due pill.
+ * TASK2: suppressed when viewing inserty category.
+ */
+function updatePastDuePill(pastDueCount) {
+    const pill = document.getElementById('past-due-pill');
+    if (!pill) return;
+    // TASK2: no past-due alerting for inserty
+    if (pastDueCount > 0 && currentStatus !== 'S' && currentCategory !== 'inserty') {
+        pill.textContent   = `${pastDueCount} po terminie`;
+        pill.style.display = '';
+    } else {
+        pill.style.display = 'none';
+    }
+}
+
+// ── Release modal (N → S) ─────────────────────────────────────────────────────
+
+/**
+ * Open the release confirmation modal for a given batch.
+ * box parameter added for TASK3 (unique key now includes box).
+ */
+function openReleaseModal(btn, codice, lotto, box) {
+    _pendingCodice = codice;
+    _pendingLotto  = lotto;
+    _pendingBox    = box;
+    _pendingBtn    = btn;
+
+    document.getElementById('release-modal-codice').textContent = codice;
+    document.getElementById('release-modal-lotto').textContent  = lotto;
+    document.getElementById('release-modal-label').textContent  = `${codice} / ${lotto}`;
+    document.getElementById('release-uwagi').value = '';
+
+    const confirmBtn = document.getElementById('release-confirm-btn');
+    confirmBtn.disabled    = false;
+    confirmBtn.textContent = 'Zatwierdź dostawę';
+
+    document.getElementById('release-modal').classList.add('active');
+    setTimeout(() => document.getElementById('release-uwagi').focus(), 100);
+}
+
+function closeReleaseModal() {
+    document.getElementById('release-modal').classList.remove('active');
+    _pendingCodice = '';
+    _pendingLotto  = '';
+    _pendingBox    = '';
+    _pendingBtn    = null;
+}
+
+function closeReleaseModalOnBackdrop(event) {
+    if (event.target.id === 'release-modal') closeReleaseModal();
+}
+
+async function submitRelease() {
+    const codice = _pendingCodice;
+    const lotto  = _pendingLotto;
+    const box    = _pendingBox;
+    const uwagi  = document.getElementById('release-uwagi').value.trim();
+
+    if (!codice || !lotto) return;
+
+    const confirmBtn = document.getElementById('release-confirm-btn');
+    confirmBtn.disabled    = true;
+    confirmBtn.textContent = 'Zapisywanie...';
+
+    try {
+        const response = await fetch('/api/matlot-status/release', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ codice_materiale: codice, lotto, box, uwagi }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            closeReleaseModal();
+            fetchRecords(true);
+        } else {
+            alert(`Błąd: ${data.error || 'Nie udało się zaktualizować statusu.'}`);
+            confirmBtn.disabled    = false;
+            confirmBtn.textContent = 'Zatwierdź dostawę';
+        }
+    } catch (err) {
+        console.error('Error releasing MATLOT row:', err);
+        alert('Błąd połączenia — nie udało się zaktualizować statusu.');
+        confirmBtn.disabled    = false;
+        confirmBtn.textContent = 'Zatwierdź dostawę';
+    }
+}
+
+// ── Withdrawal modal (S → N) — TASK0 ─────────────────────────────────────────
+
+/**
+ * Open the withdrawal confirmation modal (reverting S → N).
+ * The "Zatwierdzony" badge is the trigger button.
+ */
+function openWithdrawModal(btn, codice, lotto, box) {
+    _pendingCodice = codice;
+    _pendingLotto  = lotto;
+    _pendingBox    = box;
+    _pendingBtn    = btn;
+
+    document.getElementById('withdraw-modal-codice').textContent = codice;
+    document.getElementById('withdraw-modal-lotto').textContent  = lotto;
+    document.getElementById('withdraw-modal-label').textContent  = `${codice} / ${lotto}`;
+    document.getElementById('withdraw-reason').value = '';
+
+    const confirmBtn = document.getElementById('withdraw-confirm-btn');
+    confirmBtn.disabled    = false;
+    confirmBtn.textContent = 'Cofnij zatwierdzenie';
+
+    document.getElementById('withdraw-modal').classList.add('active');
+    setTimeout(() => document.getElementById('withdraw-reason').focus(), 100);
+}
+
+function closeWithdrawModal() {
+    document.getElementById('withdraw-modal').classList.remove('active');
+    _pendingCodice = '';
+    _pendingLotto  = '';
+    _pendingBox    = '';
+    _pendingBtn    = null;
+}
+
+function closeWithdrawModalOnBackdrop(event) {
+    if (event.target.id === 'withdraw-modal') closeWithdrawModal();
+}
+
+async function submitWithdraw() {
+    const codice           = _pendingCodice;
+    const lotto            = _pendingLotto;
+    const box              = _pendingBox;
+    const withdrawal_reason = document.getElementById('withdraw-reason').value.trim();
+
+    if (!codice || !lotto) return;
+
+    const confirmBtn = document.getElementById('withdraw-confirm-btn');
+    confirmBtn.disabled    = true;
+    confirmBtn.textContent = 'Zapisywanie...';
+
+    try {
+        const response = await fetch('/api/matlot-status/withdraw', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ codice_materiale: codice, lotto, box, withdrawal_reason }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            closeWithdrawModal();
+            fetchRecords(true);
+        } else {
+            alert(`Błąd: ${data.error || 'Nie udało się cofnąć zatwierdzenia.'}`);
+            confirmBtn.disabled    = false;
+            confirmBtn.textContent = 'Cofnij zatwierdzenie';
+        }
+    } catch (err) {
+        console.error('Error withdrawing MATLOT row:', err);
+        alert('Błąd połączenia — nie udało się cofnąć zatwierdzenia.');
+        confirmBtn.disabled    = false;
+        confirmBtn.textContent = 'Cofnij zatwierdzenie';
+    }
+}
+
+// ── Uwagi edit modal — TASK4 ──────────────────────────────────────────────────
+
+/**
+ * Open the uwagi edit modal for any row (regardless of release_status).
+ */
+function openUwagiModal(btn, codice, lotto, box, currentUwagi) {
+    _pendingCodice = codice;
+    _pendingLotto  = lotto;
+    _pendingBox    = box;
+    _pendingBtn    = btn;
+
+    document.getElementById('uwagi-modal-label').textContent  = `${codice} / ${lotto}`;
+    document.getElementById('uwagi-input').value = currentUwagi || '';
+
+    const confirmBtn = document.getElementById('uwagi-confirm-btn');
+    confirmBtn.disabled    = false;
+    confirmBtn.textContent = 'Zapisz';
+
+    document.getElementById('uwagi-modal').classList.add('active');
+    setTimeout(() => document.getElementById('uwagi-input').focus(), 100);
+}
+
+function closeUwagiModal() {
+    document.getElementById('uwagi-modal').classList.remove('active');
+    _pendingCodice = '';
+    _pendingLotto  = '';
+    _pendingBox    = '';
+    _pendingBtn    = null;
+}
+
+function closeUwagiModalOnBackdrop(event) {
+    if (event.target.id === 'uwagi-modal') closeUwagiModal();
+}
+
+async function submitUwagi() {
+    const codice = _pendingCodice;
+    const lotto  = _pendingLotto;
+    const box    = _pendingBox;
+    const uwagi  = document.getElementById('uwagi-input').value.trim();
+
+    if (!codice || !lotto) return;
+
+    const confirmBtn = document.getElementById('uwagi-confirm-btn');
+    confirmBtn.disabled    = true;
+    confirmBtn.textContent = 'Zapisywanie...';
+
+    try {
+        const response = await fetch('/api/matlot-status/uwagi', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ codice_materiale: codice, lotto, box, uwagi }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            closeUwagiModal();
+            fetchRecords(true);
+        } else {
+            alert(`Błąd: ${data.error || 'Nie udało się zapisać uwag.'}`);
+            confirmBtn.disabled    = false;
+            confirmBtn.textContent = 'Zapisz';
+        }
+    } catch (err) {
+        console.error('Error updating uwagi:', err);
+        alert('Błąd połączenia — nie udało się zapisać uwag.');
+        confirmBtn.disabled    = false;
+        confirmBtn.textContent = 'Zapisz';
+    }
+}
+
+// ── Bulk release modal ────────────────────────────────────────────────────────
+
+/**
+ * Enable/disable the "Zatwierdź wybrane" button based on two conditions:
+ *   1. At least one column search filter is non-empty
+ *   2. Status view is 'Oczekujące' (currentStatus === 'N')
+ */
+function updateBulkReleaseButton() {
+    const btn = document.getElementById('btn-bulk-release');
+    if (!btn) return;
+    const hasFilters = Object.values(searchFilters).some(v => v && v.trim() !== '');
+    btn.disabled = !(hasFilters && currentStatus === 'N');
+}
+
+/**
+ * Open the bulk-release confirmation modal.
+ * Populates the row count from totalRecords (covers all matching rows,
+ * not just the ones already loaded via infinite scroll).
+ */
+function openBulkReleaseModal() {
+    document.getElementById('bulk-release-count').textContent =
+        totalRecords === 1 ? '1 partia' : `${totalRecords} partii`;
+    document.getElementById('bulk-release-uwagi').value = '';
+
+    const confirmBtn = document.getElementById('bulk-release-confirm-btn');
+    confirmBtn.disabled    = false;
+    confirmBtn.textContent = 'Zatwierdź wybrane';
+
+    document.getElementById('bulk-release-modal').classList.add('active');
+    setTimeout(() => document.getElementById('bulk-release-uwagi').focus(), 100);
+}
+
+function closeBulkReleaseModal() {
+    document.getElementById('bulk-release-modal').classList.remove('active');
+}
+
+function closeBulkReleaseModalOnBackdrop(event) {
+    if (event.target.id === 'bulk-release-modal') closeBulkReleaseModal();
+}
+
+/**
+ * POST /api/matlot-status/bulk-release with active filters + uwagi.
+ * Server applies the same filters and releases all matching pending rows.
+ */
+async function submitBulkRelease() {
+    const uwagi = document.getElementById('bulk-release-uwagi').value.trim();
+
+    const confirmBtn = document.getElementById('bulk-release-confirm-btn');
+    confirmBtn.disabled    = true;
+    confirmBtn.textContent = 'Zatwierdzanie...';
+
+    // Mirror the active search filters to the server
+    const searchPayload = {};
+    Object.entries(searchFilters).forEach(([key, val]) => {
+        if (val && val.trim()) searchPayload[key] = val.trim();
+    });
+
+    try {
+        const response = await fetch('/api/matlot-status/bulk-release', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                uwagi,
+                category: currentCategory,
+                search:   searchPayload,
+            }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            closeBulkReleaseModal();
+            fetchRecords(true);
+        } else {
+            alert(`Błąd: ${data.error || 'Nie udało się zatwierdzić partii.'}`);
+            confirmBtn.disabled    = false;
+            confirmBtn.textContent = 'Zatwierdź wybrane';
+        }
+    } catch (err) {
+        console.error('Error bulk releasing MATLOT rows:', err);
+        alert('Błąd połączenia — nie udało się zatwierdzić partii.');
+        confirmBtn.disabled    = false;
+        confirmBtn.textContent = 'Zatwierdź wybrane';
+    }
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+
+function updateClearFiltersButton() {
+    const clearButton = document.getElementById('btn-clear-filters');
+    const hasActiveFilters = Object.values(searchFilters).some(v => v && v.trim() !== '');
+    if (clearButton) clearButton.style.display = hasActiveFilters ? 'inline-flex' : 'none';
+    updateBulkReleaseButton();
+}
+
+function clearAllFilters() {
+    document.querySelectorAll('.column-search').forEach(input => { input.value = ''; });
+    searchFilters = {};
+    applyFilters();
+    updateClearFiltersButton();
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function escapeHtml(text) {
+    if (!text && text !== 0) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return String(text || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => { clearTimeout(timeout); func(...args); };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
