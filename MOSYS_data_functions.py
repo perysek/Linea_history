@@ -602,6 +602,39 @@ def get_matlot_verified_batches() -> set:
 		return set()
 
 
+def auto_approve_matlot_batches() -> int:
+	"""Bulk-set LOTTO_VERIFICATO='S' in MOSYS for batches matching the auto-approve rule.
+
+	Auto-approve criteria (applied together):
+	    - CODICE_MATERIALE starts with 't' (case-insensitive)
+	    - LOTTO starts with '0AV' OR '0BU'
+	    - Current LOTTO_VERIFICATO = 'N'  (avoids unnecessary writes)
+
+	These batches are auto-released in MOSYS and excluded from the SQLite
+	matlot_tracking table — they are not displayed or tracked in LINEA.
+
+	Returns:
+	    Number of MOSYS rows updated (0 on error or when nothing to update).
+	"""
+	query = """
+		UPDATE STAAMPDB.MATLOT
+		SET LOTTO_VERIFICATO = 'S'
+		WHERE LOTTO_VERIFICATO = 'N'
+		  AND LOWER(CODICE_MATERIALE) LIKE 't%'
+		  AND (LOTTO LIKE '0AV%' OR LOTTO LIKE '0BU%')
+	"""
+	try:
+		with pervasive_connection(readonly=False) as conn:
+			cursor = conn.cursor()
+			cursor.execute(query)
+			count = cursor.rowcount
+			conn.commit()
+		return count
+	except Exception as e:
+		print(f"Error auto-approving MATLOT batches: {e}")
+		return 0
+
+
 def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: str) -> bool:
 	"""Write release status back to MOSYS MATLOT.LOTTO_VERIFICATO.
 

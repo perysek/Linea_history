@@ -29,6 +29,21 @@ VALID_SORT_FIELDS = {
 }
 
 
+def _is_auto_approved(codice: str, lotto: str) -> bool:
+    """Return True for batches that are auto-approved and excluded from tracking.
+
+    Rule: CODICE_MATERIALE starts with 't' (case-insensitive)
+          AND LOTTO starts with '0AV' or '0BU'.
+
+    These batches are bulk-released in MOSYS during sync and never added
+    to the local matlot_tracking table.
+    """
+    return (
+        codice.lower().startswith('t')
+        and (lotto.startswith('0AV') or lotto.startswith('0BU'))
+    )
+
+
 def _sync_from_mosys():
     """Fetch all MATLOT batches from MOSYS and upsert into matlot_tracking.
 
@@ -45,16 +60,33 @@ def _sync_from_mosys():
     Cleanup rule: tracking rows gone from MOSYS AND already released are deleted.
     Pending rows absent from MOSYS are preserved to handle sync lag.
 
+    Auto-approve rule: batches matching _is_auto_approved() are set to
+    LOTTO_VERIFICATO='S' in MOSYS and excluded from matlot_tracking entirely.
+    Any existing SQLite tracking rows for them are deleted during sync.
+
     Returns:
         tuple(int synced_count, str|None error_message)
     """
     try:
-        from MOSYS_data_functions import get_matlot_batches
+        from MOSYS_data_functions import get_matlot_batches, auto_approve_matlot_batches
         df = get_matlot_batches()
     except Exception as e:
         msg = f"MOSYS fetch failed: {e}"
         current_app.logger.error(f"MATLOT _sync_from_mosys: {msg}")
         return 0, msg
+
+    # Step 1: Bulk-approve matching batches in MOSYS (LOTTO_VERIFICATO N → S).
+    # Done before the main loop so the df already reflects the updated status
+    # if MOSYS returns fresh data.
+    try:
+        from MOSYS_data_functions import auto_approve_matlot_batches
+        approved_count = auto_approve_matlot_batches()
+        if approved_count:
+            current_app.logger.info(
+                f"MATLOT auto-approve: set LOTTO_VERIFICATO='S' for {approved_count} MOSYS rows"
+            )
+    except Exception as e:
+        current_app.logger.warning(f"MATLOT auto-approve failed (non-fatal): {e}")
 
     today = date.today()
     mosys_keys = set()  # (codice, lotto, box) tuples seen in this sync
@@ -64,6 +96,25 @@ def _sync_from_mosys():
             codice = str(row.get('CODICE_MATERIALE') or '').strip()
             lotto  = str(row.get('LOTTO') or '').strip()
             if not codice or not lotto:
+                continue
+
+            # Step 2: Skip auto-approved batches — delete any stale SQLite rows
+            # for them and do not add them to mosys_keys or tracking.
+            if _is_auto_approved(codice, lotto):
+                box_parts = [
+                    str(row.get('BOX_X') or '').strip(),
+                    str(row.get('BOX_Y') or '').strip(),
+                    str(row.get('BOX_Z') or '').strip(),
+                ]
+                box = '-'.join(p for p in box_parts if p) or '-'
+                stale = MatlotTracking.query.filter_by(
+                    codice_materiale=codice, lotto=lotto, box=box
+                ).first()
+                if stale:
+                    db.session.delete(stale)
+                    current_app.logger.info(
+                        f"MATLOT auto-approve: removed stale tracking row {codice}/{lotto}@{box}"
+                    )
                 continue
 
             giacenza = row.get('GIACENZA_LOTTO')
@@ -138,19 +189,32 @@ def _get_tracking_rows():
     result = []
     for t in rows:
         prima_vista = t.prima_vista
-        giorni = (today - prima_vista).days
+        is_surowce = t.codice_materiale.lower().startswith('t')
+
+        # Giorni calculation — only meaningful for surowce ('t' prefix) rows.
+        # S status: count days the batch waited until approval (released_at − prima_vista).
+        # N status: count days since first seen (today − prima_vista).
+        # Non-surowce rows get 0 — the column is hidden in the UI for inserty.
+        if is_surowce:
+            if t.release_status == 'S' and t.released_at:
+                giorni = (t.released_at.date() - prima_vista).days
+            else:
+                giorni = (today - prima_vista).days
+        else:
+            giorni = 0
+
         released_at_str = (
-            t.released_at.strftime('%d.%m.%Y %H:%M')
+            t.released_at.strftime('%d.%m.%Y')
             if t.released_at else ''
         )
         withdrawn_at_str = (
             t.withdrawn_at.strftime('%d.%m.%Y %H:%M')
             if t.withdrawn_at else ''
         )
-        # Disable GIORNI counter for any withdrawn row (S→N reversal).
-        # No codice prefix restriction — any withdrawn batch stops counting wait days.
+        # Disable GIORNI counter for withdrawn surowce rows (S→N reversal).
         giorni_disabled = (
-            t.release_status == 'N'
+            is_surowce
+            and t.release_status == 'N'
             and t.withdrawn_at is not None
         )
         result.append({
@@ -161,7 +225,7 @@ def _get_tracking_rows():
             'prima_vista':      prima_vista.strftime('%d.%m.%Y'),
             'giorni':           giorni,
             'giorni_disabled':  giorni_disabled,
-            'is_past_due':      giorni > 2 and not giorni_disabled,
+            'is_past_due':      is_surowce and giorni > 2 and not giorni_disabled,
             'release_status':   t.release_status,
             'released_at':      released_at_str,
             'withdrawn_at':     withdrawn_at_str,
