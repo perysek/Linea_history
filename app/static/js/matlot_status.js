@@ -425,7 +425,7 @@ function updatePastDuePill(pastDueCount) {
     const pill = document.getElementById('past-due-pill');
     if (!pill) return;
     // TASK2: no past-due alerting for inserty
-    if (pastDueCount > 0 && currentStatus !== 'S' && currentCategory !== 'inserty') {
+    if (pastDueCount > 0 && currentCategory !== 'inserty') {
         pill.textContent   = `${pastDueCount} po terminie`;
         pill.style.display = '';
     } else {

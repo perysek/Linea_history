@@ -264,7 +264,7 @@ def _get_tracking_rows():
             'prima_vista':      prima_vista.strftime('%d.%m.%Y'),
             'giorni':           giorni,
             'giorni_disabled':  giorni_disabled,
-            'is_past_due':      is_surowce and giorni > 2 and not giorni_disabled,
+            'is_past_due':      is_surowce and t.release_status == 'N' and giorni > 2 and not giorni_disabled,
             'release_status':   t.release_status,
             'released_at':      released_at_str,
             'withdrawn_at':     withdrawn_at_str,
@@ -369,13 +369,12 @@ def api_matlot_status():
                 key = VALID_SORT_FIELDS.get(col, col.lower())
                 rows = [r for r in rows if val in str(r.get(key) or '').lower()]
 
-        # urgent_count: pending items that are past-due OR new today — computed
-        # BEFORE status filter so the Pilne button stays visible from any tab.
-        urgent_count = sum(
-            1 for r in rows
-            if r['release_status'] == 'N'
-            and (r['is_past_due'] or r['prima_vista'] == today_str)
-        )
+        # Badge counts — always from pending items in current category,
+        # independent of which status tab is active.
+        pending_rows   = [r for r in rows if r['release_status'] == 'N']
+        past_due_count = sum(1 for r in pending_rows if r['is_past_due'])
+        new_count      = sum(1 for r in pending_rows if r['prima_vista'] == today_str)
+        urgent_count   = sum(1 for r in pending_rows if r['is_past_due'] or r['prima_vista'] == today_str)
 
         # Status / Pilne filter
         if status in ('N', 'S'):
@@ -384,9 +383,7 @@ def api_matlot_status():
             rows = [r for r in rows if r['release_status'] == 'N'
                     and (r['is_past_due'] or r['prima_vista'] == today_str)]
 
-        total_count    = len(rows)
-        past_due_count = sum(1 for r in rows if r['is_past_due'])
-        new_count      = sum(1 for r in rows if r['prima_vista'] == today_str and r['release_status'] == 'N')
+        total_count = len(rows)
 
         sort_key = VALID_SORT_FIELDS.get(sort_field, 'codice_materiale')
         reverse  = sort_dir == 'desc'
