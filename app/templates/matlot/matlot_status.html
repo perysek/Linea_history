@@ -277,6 +277,24 @@
         background: #bbf7d0;
         border-color: #15803d;
     }
+
+    /* Date input inside modal — same look as uwagi textarea */
+    .modal-date-input {
+        width: 100%;
+        padding: 0.4rem 0.625rem;
+        font-size: 0.875rem;
+        font-family: inherit;
+        border: 1px solid var(--color-border);
+        border-radius: 4px;
+        box-sizing: border-box;
+        color: var(--color-ink);
+        transition: border-color 0.15s;
+    }
+    .modal-date-input:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.12);
+    }
 </style>
 {% endblock %}
 
@@ -573,12 +591,12 @@
     </div>
 </div>
 
-<!-- Uwagi edit modal — TASK4 -->
+<!-- Uwagi / batch edit modal -->
 <div id="uwagi-modal" class="modal-overlay" onclick="closeUwagiModalOnBackdrop(event)">
     <div class="modal-container" style="width: 480px;">
         <div class="modal-header">
             <div>
-                <h2 class="modal-title">Edytuj uwagi</h2>
+                <h2 class="modal-title">Edycja partii</h2>
                 <p class="modal-subtitle">Partia: <span id="uwagi-modal-label"></span></p>
             </div>
             <button class="modal-close-btn" onclick="closeUwagiModal()">
@@ -588,6 +606,25 @@
             </button>
         </div>
         <div class="modal-body">
+            <!-- Status toggle -->
+            <div class="modal-form-row">
+                <span class="modal-form-label">Status zatwierdzenia</span>
+                <div class="category-toggle" style="margin-top: 0.25rem;">
+                    <button class="cat-btn" id="uwagi-status-N" onclick="setUwagiStatus('N')">N — Oczekuje</button>
+                    <button class="cat-btn" id="uwagi-status-S" onclick="setUwagiStatus('S')">S — Zatwierdzone</button>
+                </div>
+            </div>
+            <!-- Prima vista -->
+            <div class="modal-form-row">
+                <label class="modal-form-label" for="uwagi-prima-vista">Data przyjęcia</label>
+                <input type="date" id="uwagi-prima-vista" class="modal-date-input">
+            </div>
+            <!-- Released at — hidden when status = N -->
+            <div class="modal-form-row" id="uwagi-released-at-row">
+                <label class="modal-form-label" for="uwagi-released-at">Data zatwierdzenia</label>
+                <input type="date" id="uwagi-released-at" class="modal-date-input">
+            </div>
+            <!-- Uwagi -->
             <div class="modal-form-row">
                 <label class="modal-form-label" for="uwagi-input">Uwagi</label>
                 <textarea id="uwagi-input" class="modal-uwagi-input"

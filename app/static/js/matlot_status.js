@@ -18,10 +18,11 @@ const RECORDS_PER_PAGE = 100;
 let hasMoreRecords = false;
 
 // Release modal state
-let _pendingCodice = '';
-let _pendingLotto  = '';
-let _pendingBox    = '';
-let _pendingBtn    = null;
+let _pendingCodice        = '';
+let _pendingLotto         = '';
+let _pendingBox           = '';
+let _pendingBtn           = null;
+let _pendingReleaseStatus = 'N';
 
 // Initialize on page load — sync from MOSYS first, then display data
 document.addEventListener('DOMContentLoaded', () => {
@@ -287,8 +288,11 @@ function buildRowHtml(record) {
            </button>`;
 
     // TASK4: uwagi edit button — always shown for all rows
-    const editUwagiBtn = `<button class="btn-edit-uwagi" title="Edytuj uwagi"
-                onclick="openUwagiModal(this, '${co}', '${lo}', '${bo}', '${uwa}')">
+    const rs  = escapeAttr(record.release_status || 'N');
+    const pv  = escapeAttr(record.prima_vista   || '');
+    const rat = escapeAttr(record.released_at   || '');
+    const editUwagiBtn = `<button class="btn-edit-uwagi" title="Edytuj partię"
+                onclick="openUwagiModal(this, '${co}', '${lo}', '${bo}', '${uwa}', '${rs}', '${pv}', '${rat}')">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -552,17 +556,38 @@ async function submitWithdraw() {
 
 // ── Uwagi edit modal — TASK4 ──────────────────────────────────────────────────
 
+/** Convert dd.mm.yyyy → yyyy-mm-dd for <input type="date"> value. */
+function _dmyToIso(dmy) {
+    if (!dmy) return '';
+    const p = dmy.split('.');
+    return p.length === 3 ? `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : '';
+}
+
+/** Toggle status buttons and show/hide released_at row. */
+function setUwagiStatus(status) {
+    _pendingReleaseStatus = status;
+    document.getElementById('uwagi-status-N').classList.toggle('active', status === 'N');
+    document.getElementById('uwagi-status-S').classList.toggle('active', status === 'S');
+    const releasedRow = document.getElementById('uwagi-released-at-row');
+    releasedRow.style.display = status === 'S' ? '' : 'none';
+    if (status === 'N') document.getElementById('uwagi-released-at').value = '';
+}
+
 /**
- * Open the uwagi edit modal for any row (regardless of release_status).
+ * Open the batch edit modal (uwagi, status, dates).
  */
-function openUwagiModal(btn, codice, lotto, box, currentUwagi) {
+function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, primaVista, releasedAt) {
     _pendingCodice = codice;
     _pendingLotto  = lotto;
     _pendingBox    = box;
     _pendingBtn    = btn;
 
-    document.getElementById('uwagi-modal-label').textContent  = `${codice} / ${lotto}`;
-    document.getElementById('uwagi-input').value = currentUwagi || '';
+    document.getElementById('uwagi-modal-label').textContent = `${codice} / ${lotto}`;
+    document.getElementById('uwagi-input').value             = currentUwagi || '';
+    document.getElementById('uwagi-prima-vista').value       = _dmyToIso(primaVista);
+    document.getElementById('uwagi-released-at').value       = _dmyToIso(releasedAt);
+
+    setUwagiStatus(releaseStatus || 'N');
 
     const confirmBtn = document.getElementById('uwagi-confirm-btn');
     confirmBtn.disabled    = false;
@@ -585,10 +610,12 @@ function closeUwagiModalOnBackdrop(event) {
 }
 
 async function submitUwagi() {
-    const codice = _pendingCodice;
-    const lotto  = _pendingLotto;
-    const box    = _pendingBox;
-    const uwagi  = document.getElementById('uwagi-input').value.trim();
+    const codice     = _pendingCodice;
+    const lotto      = _pendingLotto;
+    const box        = _pendingBox;
+    const uwagi      = document.getElementById('uwagi-input').value.trim();
+    const primaVista = document.getElementById('uwagi-prima-vista').value || null;
+    const releasedAt = document.getElementById('uwagi-released-at').value || null;
 
     if (!codice || !lotto) return;
 
@@ -600,7 +627,15 @@ async function submitUwagi() {
         const response = await fetch('/api/matlot-status/uwagi', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ codice_materiale: codice, lotto, box, uwagi }),
+            body:    JSON.stringify({
+                codice_materiale: codice,
+                lotto,
+                box,
+                uwagi,
+                release_status: _pendingReleaseStatus,
+                prima_vista:    primaVista,
+                released_at:    releasedAt,
+            }),
         });
         const data = await response.json();
 
@@ -608,13 +643,13 @@ async function submitUwagi() {
             closeUwagiModal();
             fetchRecords(true);
         } else {
-            alert(`Błąd: ${data.error || 'Nie udało się zapisać uwag.'}`);
+            alert(`Błąd: ${data.error || 'Nie udało się zapisać.'}`);
             confirmBtn.disabled    = false;
             confirmBtn.textContent = 'Zapisz';
         }
     } catch (err) {
-        console.error('Error updating uwagi:', err);
-        alert('Błąd połączenia — nie udało się zapisać uwag.');
+        console.error('Error updating:', err);
+        alert('Błąd połączenia — nie udało się zapisać.');
         confirmBtn.disabled    = false;
         confirmBtn.textContent = 'Zapisz';
     }

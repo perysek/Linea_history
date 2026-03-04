@@ -509,20 +509,40 @@ def api_matlot_withdraw():
 
 @matlot_bp.route('/api/matlot-status/uwagi', methods=['POST'])
 def api_matlot_uwagi():
-    """Update the uwagi (notes) field for a tracking row.
+    """Update editable fields for a tracking row.
 
-    Available regardless of release_status.
     Requires: codice_materiale, lotto, box.
-    Optional: uwagi (empty string clears the field).
+    Optional:
+        uwagi           — notes (empty string clears)
+        release_status  — 'N' or 'S'; switching to 'N' always clears released_at
+        prima_vista     — YYYY-MM-DD
+        released_at     — YYYY-MM-DD (ignored when release_status='N')
+
+    Withdrawal columns (withdrawn_at, withdrawal_reason) are never touched.
+    When release_status changes, MOSYS is updated best-effort after commit.
     """
-    data   = request.get_json(silent=True) or {}
-    codice = str(data.get('codice_materiale') or '').strip()
-    lotto  = str(data.get('lotto') or '').strip()
-    box    = str(data.get('box') or '').strip() or '-'
-    uwagi  = str(data.get('uwagi') or '').strip()
+    data            = request.get_json(silent=True) or {}
+    codice          = str(data.get('codice_materiale') or '').strip()
+    lotto           = str(data.get('lotto') or '').strip()
+    box             = str(data.get('box') or '').strip() or '-'
+    uwagi           = str(data.get('uwagi') or '').strip()
+    new_status      = str(data.get('release_status') or '').strip().upper() or None
+    prima_vista_str = str(data.get('prima_vista') or '').strip() or None
+    released_at_str = str(data.get('released_at') or '').strip() or None
 
     if not codice or not lotto:
         return jsonify({'success': False, 'error': 'codice_materiale and lotto required'}), 400
+
+    if new_status and new_status not in ('N', 'S'):
+        return jsonify({'success': False, 'error': 'release_status must be N or S'}), 400
+
+    def _parse_date(s):
+        y, m, d = s.split('-')
+        return date(int(y), int(m), int(d))
+
+    def _parse_datetime(s):
+        y, m, d = s.split('-')
+        return datetime(int(y), int(m), int(d))
 
     try:
         tracking = MatlotTracking.query.filter_by(
@@ -532,13 +552,51 @@ def api_matlot_uwagi():
         if not tracking:
             return jsonify({'success': False, 'error': 'Batch not found in tracking'}), 404
 
+        old_status = tracking.release_status
         tracking.uwagi = uwagi or None
+
+        if prima_vista_str:
+            try:
+                tracking.prima_vista = _parse_date(prima_vista_str)
+            except (ValueError, AttributeError):
+                return jsonify({'success': False, 'error': f'Invalid prima_vista: {prima_vista_str}'}), 400
+
+        if new_status:
+            tracking.release_status = new_status
+            if new_status == 'N':
+                tracking.released_at = None          # always clear when reverting to pending
+            elif new_status == 'S' and released_at_str:
+                try:
+                    tracking.released_at = _parse_datetime(released_at_str)
+                except (ValueError, AttributeError):
+                    return jsonify({'success': False, 'error': f'Invalid released_at: {released_at_str}'}), 400
+        elif released_at_str:
+            # Status unchanged — date edited directly
+            try:
+                tracking.released_at = _parse_datetime(released_at_str)
+            except (ValueError, AttributeError):
+                return jsonify({'success': False, 'error': f'Invalid released_at: {released_at_str}'}), 400
+
         db.session.commit()
 
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"api_matlot_uwagi SQLite error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Best-effort MOSYS sync when release_status changed
+    if new_status and new_status != old_status:
+        try:
+            from MOSYS_data_functions import update_matlot_lotto_status
+            ok = update_matlot_lotto_status(codice, lotto, new_status)
+            if not ok:
+                current_app.logger.warning(
+                    f"MOSYS write failed for status edit {codice}/{lotto}@{box} → {new_status}"
+                )
+        except Exception as mosys_err:
+            current_app.logger.warning(
+                f"MOSYS write exception for status edit {codice}/{lotto}@{box}: {mosys_err}"
+            )
 
     return jsonify({'success': True})
 
