@@ -90,8 +90,8 @@ def sync_new_excel_data(force=False):
     # Update last sync time
     _last_sync_time = current_time
 
-    # Excel file configuration
-    excel_file = r'G:\DOCUMENT\qualita\System Zarządzania Jakością\Cele jakościowe\PPM wewnętrzny koszty złej jakości (2023).xlsm'
+    # Excel file configuration -- path from app config, overridable via EXCEL_FILE_PATH env var
+    excel_file = current_app.config['EXCEL_FILE_PATH']
     sheet_name = 'dane'
 
     # Column mapping (Excel columns are 1-indexed)

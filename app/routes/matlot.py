@@ -10,6 +10,7 @@ Architecture:
 """
 from flask import Blueprint, render_template, jsonify, request, current_app
 from datetime import date, datetime
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from app import db
 from app.models.matlot import MatlotTracking
@@ -264,10 +265,41 @@ def matlot_status():
 
 # ── API: refresh (MOSYS sync) ─────────────────────────────────────────────────
 
+_MOSYS_SYNC_TIMEOUT = 15  # seconds before giving up on MOSYS connection
+
 @matlot_bp.route('/api/matlot-refresh', methods=['POST'])
 def api_matlot_refresh():
-    """Sync MOSYS → matlot_tracking. Called on page load and Refresh button."""
-    synced, error = _sync_from_mosys()
+    """Sync MOSYS → matlot_tracking. Called on page load and Refresh button.
+
+    Runs _sync_from_mosys in a thread with a hard timeout so the HTTP request
+    always returns even when the Pervasive ODBC driver hangs on TCP connect.
+    The background thread may keep running until the OS TCP timeout fires,
+    but the user sees a fast error response instead of an infinite spinner.
+
+    Flask's app context is thread-local, so we unwrap the real app object and
+    push a fresh context inside the worker thread for SQLAlchemy access.
+    """
+    app = current_app._get_current_object()
+
+    def _sync_with_context():
+        with app.app_context():
+            return _sync_from_mosys()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_sync_with_context)
+        try:
+            synced, error = future.result(timeout=_MOSYS_SYNC_TIMEOUT)
+        except FuturesTimeoutError:
+            current_app.logger.warning(
+                f"MATLOT sync timed out after {_MOSYS_SYNC_TIMEOUT}s — MOSYS unreachable?"
+            )
+            return jsonify({
+                'success':   False,
+                'error':     f'MOSYS niedostępny (timeout {_MOSYS_SYNC_TIMEOUT}s)',
+                'synced':    0,
+                'timestamp': datetime.now().strftime('%H:%M:%S'),
+            }), 504
+
     if error:
         return jsonify({
             'success':   False,

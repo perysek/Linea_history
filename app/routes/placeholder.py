@@ -873,7 +873,7 @@ def admin_backfill_opis():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@placeholder_bp.route('/admin/sync-excel', methods=['POST'])
+@placeholder_bp.route('/admin/sync-excel', methods=['GET', 'POST'])
 def admin_sync_excel():
     """Admin endpoint to manually force Excel data sync."""
     try:
