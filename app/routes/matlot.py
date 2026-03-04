@@ -372,7 +372,7 @@ def api_matlot_status():
         total_count    = len(rows)
         past_due_count = sum(1 for r in rows if r['is_past_due'])
         today_str      = date.today().strftime('%d.%m.%Y')
-        new_count      = sum(1 for r in rows if r['prima_vista'] == today_str)
+        new_count      = sum(1 for r in rows if r['prima_vista'] == today_str and r['release_status'] == 'N')
 
         sort_key = VALID_SORT_FIELDS.get(sort_field, 'codice_materiale')
         reverse  = sort_dir == 'desc'

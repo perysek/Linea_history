@@ -250,7 +250,7 @@ function buildRowHtml(record) {
     const giorniHide   = isInserty || record.giorni_disabled;
 
     // TASK2: no alert row classes for inserty category
-    const isNew = record.prima_vista === _todayDmy;
+    const isNew = record.prima_vista === _todayDmy && record.release_status === 'N';
     const rowClass = (isInserty
         ? 'stagger-row'
         : isReleased
