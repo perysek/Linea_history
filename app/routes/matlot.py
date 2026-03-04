@@ -355,23 +355,37 @@ def api_matlot_status():
 
     try:
         rows = _get_tracking_rows()
+        today_str = date.today().strftime('%d.%m.%Y')
 
-        if status in ('N', 'S'):
-            rows = [r for r in rows if r['release_status'] == status]
-
+        # Category filter
         if category == 'surowce':
             rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
         elif category == 'inserty':
             rows = [r for r in rows if r.get('is_insert')]
 
+        # Search filter
         for col, val in search.items():
             if val:
                 key = VALID_SORT_FIELDS.get(col, col.lower())
                 rows = [r for r in rows if val in str(r.get(key) or '').lower()]
 
+        # urgent_count: pending items that are past-due OR new today — computed
+        # BEFORE status filter so the Pilne button stays visible from any tab.
+        urgent_count = sum(
+            1 for r in rows
+            if r['release_status'] == 'N'
+            and (r['is_past_due'] or r['prima_vista'] == today_str)
+        )
+
+        # Status / Pilne filter
+        if status in ('N', 'S'):
+            rows = [r for r in rows if r['release_status'] == status]
+        elif status == 'PILNE':
+            rows = [r for r in rows if r['release_status'] == 'N'
+                    and (r['is_past_due'] or r['prima_vista'] == today_str)]
+
         total_count    = len(rows)
         past_due_count = sum(1 for r in rows if r['is_past_due'])
-        today_str      = date.today().strftime('%d.%m.%Y')
         new_count      = sum(1 for r in rows if r['prima_vista'] == today_str and r['release_status'] == 'N')
 
         sort_key = VALID_SORT_FIELDS.get(sort_field, 'codice_materiale')
@@ -390,6 +404,7 @@ def api_matlot_status():
             'rows':           page,
             'past_due_count': past_due_count,
             'new_count':      new_count,
+            'urgent_count':   urgent_count,
             'pagination': {
                 'total':    total_count,
                 'limit':    limit,

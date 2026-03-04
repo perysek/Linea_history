@@ -111,6 +111,7 @@ function setStatus(stat) {
     document.getElementById('stat-pending').classList.toggle('active',  stat === 'N');
     document.getElementById('stat-released').classList.toggle('active', stat === 'S');
     document.getElementById('stat-all').classList.toggle('active',      stat === 'ALL');
+    document.getElementById('stat-pilne').classList.toggle('active',    stat === 'PILNE');
     updateBulkReleaseButton();
     fetchRecords(true);
 }
@@ -211,6 +212,7 @@ async function fetchRecords(resetOffset = true) {
             updateLoadMoreButton(data.pagination);
             updatePastDuePill(data.past_due_count);
             updateNewRowsPill(data.new_count || 0);
+            updatePilneButton(data.urgent_count || 0);
         } else {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych z MOSYS</td></tr>';
         }
@@ -439,6 +441,16 @@ function updateNewRowsPill(newCount) {
         pill.style.display = '';
     } else {
         pill.style.display = 'none';
+    }
+}
+
+function updatePilneButton(urgentCount) {
+    const btn = document.getElementById('stat-pilne');
+    if (!btn) return;
+    btn.style.display = urgentCount > 0 ? '' : 'none';
+    // If currently in PILNE view and nothing urgent remains, drop back to N
+    if (urgentCount === 0 && currentStatus === 'PILNE') {
+        setStatus('N');
     }
 }
 
@@ -744,7 +756,7 @@ function updateBulkReleaseButton() {
     const btn = document.getElementById('btn-bulk-release');
     if (!btn) return;
     const hasFilters = Object.values(searchFilters).some(v => v && v.trim() !== '');
-    btn.disabled = !(hasFilters && currentStatus === 'N');
+    btn.disabled = !(currentStatus === 'PILNE' || (hasFilters && currentStatus === 'N'));
 }
 
 /**

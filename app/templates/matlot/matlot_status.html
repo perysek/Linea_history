@@ -88,6 +88,16 @@
         background: #fefce8 !important;
     }
 
+    /* Pilne (urgent) toggle button — red active state */
+    .cat-btn-pilne.active {
+        background: #dc2626;
+        color: white;
+    }
+    .cat-btn-pilne:not(.active):hover {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
     /* Category toggle */
     .category-toggle {
         display: inline-flex;
@@ -331,11 +341,13 @@
             <button class="cat-btn"        id="cat-inserty" onclick="setCategory('inserty')">Inserty</button>
         </div>
 
-        <!-- Status toggle (Oczekujące / Zatwierdzone / Wszystkie) -->
+        <!-- Status toggle (Oczekujące / Zatwierdzone / Wszystkie / Pilne) -->
         <div class="category-toggle" style="margin-left: auto;">
             <button class="cat-btn active" id="stat-pending"  onclick="setStatus('N')">Oczekujące</button>
             <button class="cat-btn"        id="stat-released" onclick="setStatus('S')">Zatwierdzone</button>
             <button class="cat-btn"        id="stat-all"      onclick="setStatus('ALL')">Wszystkie</button>
+            <button class="cat-btn cat-btn-pilne" id="stat-pilne" onclick="setStatus('PILNE')"
+                    style="display: none;">Pilne</button>
         </div>
 
         <!-- Refresh MOSYS button -->
