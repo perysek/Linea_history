@@ -341,15 +341,16 @@
             <!-- Fixed Header — 9 columns -->
             <table class="refined-table" style="flex-shrink: 0;">
                 <colgroup>
-                    <col style="width: 16%;">  <!-- Kod materiału -->
-                    <col style="width: 16%;">  <!-- Nr partii -->
-                    <col style="width: 7%;">   <!-- Ilość -->
-                    <col style="width: 10%;">  <!-- Lokalizacja -->
-                    <col style="width: 8%;">   <!-- Data przyjęcia -->
-                    <col style="width: 8%;">   <!-- Data zatwierdzenia -->
-                    <col style="width: 17%;">  <!-- Uwagi -->
-                    <col style="width: 8%;">   <!-- Dni od przyjęcia -->
-                    <col style="width: 10%;">  <!-- Akcja -->
+                    <col style="width: 11%;">  <!-- Kod materiału -->
+                    <col style="width: 16%;">  <!-- Nazwa handlowa -->
+                    <col style="width: 13%;">  <!-- Nr partii -->
+                    <col style="width: 6%;">   <!-- Ilość -->
+                    <col style="width: 9%;">   <!-- Lokalizacja -->
+                    <col style="width: 7%;">   <!-- Data przyjęcia -->
+                    <col style="width: 7%;">   <!-- Data zatwierdzenia -->
+                    <col style="width: 15%;">  <!-- Uwagi -->
+                    <col style="width: 7%;">   <!-- Czas od przyjęcia -->
+                    <col style="width: 9%;">   <!-- Akcja -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -362,6 +363,13 @@
                                     </svg>
                                 </div>
                                 <input type="text" class="column-search" placeholder="Szukaj..." data-column="CODICE_MATERIALE">
+                            </div>
+                        </th>
+                        <th>
+                            <div class="th-content">
+                                <div class="th-header">
+                                    <span>Nazwa handlowa</span>
+                                </div>
                             </div>
                         </th>
                         <th class="sortable">
@@ -452,19 +460,20 @@
             <div class="tbody-scroll">
                 <table class="refined-table">
                     <colgroup>
+                        <col style="width: 11%;">
                         <col style="width: 16%;">
-                        <col style="width: 16%;">
+                        <col style="width: 13%;">
+                        <col style="width: 6%;">
+                        <col style="width: 9%;">
                         <col style="width: 7%;">
-                        <col style="width: 10%;">
-                        <col style="width: 8%;">
-                        <col style="width: 8%;">
-                        <col style="width: 17%;">
-                        <col style="width: 8%;">
-                        <col style="width: 10%;">
+                        <col style="width: 7%;">
+                        <col style="width: 15%;">
+                        <col style="width: 7%;">
+                        <col style="width: 9%;">
                     </colgroup>
                     <tbody id="matlot-tbody">
                         <tr>
-                            <td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
+                            <td colspan="10" style="text-align: center; padding: 2rem; color: var(--color-ink-muted);">
                                 Ładowanie...
                             </td>
                         </tr>

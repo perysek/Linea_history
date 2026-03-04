@@ -17,6 +17,10 @@ from app.models.matlot import MatlotTracking
 
 matlot_bp = Blueprint('matlot', __name__)
 
+# In-memory cache: codice_materiale → NOME_COMMERCIALE from MATPRI.
+# Populated during MOSYS sync; persists for the lifetime of the process.
+_material_names: dict = {}
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 VALID_SORT_FIELDS = {
@@ -93,6 +97,14 @@ def _sync_from_mosys():
     mosys_keys = set()  # (codice, lotto, box) tuples seen in this sync
 
     if df is not None and not df.empty:
+        # Build material-name cache from this sync's data (MATPRI JOIN).
+        global _material_names
+        for _, row in df.iterrows():
+            codice_key = str(row.get('CODICE_MATERIALE') or '').strip()
+            nome = str(row.get('NOME_COMMERCIALE') or '').strip()
+            if codice_key and nome:
+                _material_names[codice_key] = nome
+
         for _, row in df.iterrows():
             codice = str(row.get('CODICE_MATERIALE') or '').strip()
             lotto  = str(row.get('LOTTO') or '').strip()
@@ -220,6 +232,7 @@ def _get_tracking_rows():
         )
         result.append({
             'codice_materiale': t.codice_materiale,
+            'nome_commerciale': _material_names.get(t.codice_materiale, ''),
             'lotto':            t.lotto,
             'giacenza_lotto':   t.giacenza_lotto or 0,
             'box':              t.box or '-',

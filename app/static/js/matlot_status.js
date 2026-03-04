@@ -301,6 +301,7 @@ function buildRowHtml(record) {
             data-lotto="${escapeAttr(record.lotto)}"
             data-box="${escapeAttr(record.box)}">
             <td style="font-weight: 500;">${escapeHtml(record.codice_materiale)}</td>
+            <td style="color: var(--color-ink-muted);">${escapeHtml(record.nome_commerciale || '—')}</td>
             <td>${escapeHtml(record.lotto)}</td>
             <td style="text-align: right; padding-right: 1.5rem; font-weight: 500;">${fmt(record.giacenza_lotto)}</td>
             <td style="white-space: nowrap;">${escapeHtml(record.box)}</td>

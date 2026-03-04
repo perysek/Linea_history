@@ -553,20 +553,22 @@ def get_matlot_batches() -> pd.DataFrame:
 
 	Returns a DataFrame with columns:
 	    CODICE_MATERIALE, LOTTO, GIACENZA_LOTTO, BOX_X, BOX_Y, BOX_Z,
-	    LOTTO_VERIFICATO
+	    LOTTO_VERIFICATO, NOME_COMMERCIALE
 	Returns an empty DataFrame on error.
 	"""
 	query = """
 		SELECT
-			CODICE_MATERIALE,
-			LOTTO,
-			GIACENZA_LOTTO,
-			BOX_X,
-			BOX_Y,
-			BOX_Z,
-			LOTTO_VERIFICATO
-		FROM STAAMPDB.MATLOT
-		ORDER BY CODICE_MATERIALE, LOTTO
+			m.CODICE_MATERIALE,
+			m.LOTTO,
+			m.GIACENZA_LOTTO,
+			m.BOX_X,
+			m.BOX_Y,
+			m.BOX_Z,
+			m.LOTTO_VERIFICATO,
+			p.NOME_COMMERCIALE
+		FROM STAAMPDB.MATLOT m
+		LEFT JOIN STAAMPDB.MATPRI p ON p.CODICE = m.CODICE_MATERIALE
+		ORDER BY m.CODICE_MATERIALE, m.LOTTO
 	"""
 	try:
 		return get_pervasive(query)
