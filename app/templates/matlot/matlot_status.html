@@ -660,6 +660,13 @@
             </button>
         </div>
         <div class="modal-body">
+            <!-- Bulk mode indicator — visible only when bulk action is active -->
+            <div id="uwagi-bulk-indicator" style="display:none; margin: -0.75rem -1rem 0.75rem; padding: 0.45rem 1rem;
+                 background: #fef3c7; border-bottom: 1px solid #fde68a; font-size: 0.75rem; color: #78350f;">
+                <strong>Tryb zbiorczy</strong> —
+                zmiana statusu i Usuń dotyczą wszystkich <strong><span id="uwagi-bulk-count">0</span></strong> przefiltrowanych wierszy.
+                Inne pola są zapisywane tylko dla tej partii.
+            </div>
             <!-- Status toggle -->
             <div class="modal-form-row" id="uwagi-status-row">
                 <span class="modal-form-label">Status zatwierdzenia</span>
@@ -677,6 +684,21 @@
             <div class="modal-form-row" id="uwagi-released-at-row">
                 <label class="modal-form-label" for="uwagi-released-at">Data zatwierdzenia</label>
                 <input type="date" id="uwagi-released-at" class="modal-date-input">
+            </div>
+            <!-- Withdrawn at — enhanced only -->
+            <div class="modal-form-row" id="uwagi-withdrawn-at-row">
+                <label class="modal-form-label" for="uwagi-withdrawn-at">Data cofnięcia
+                    <span style="font-weight:400; text-transform:none; letter-spacing:0;">(puste = usuń)</span>
+                </label>
+                <input type="date" id="uwagi-withdrawn-at" class="modal-date-input">
+            </div>
+            <!-- Withdrawal reason — enhanced only -->
+            <div class="modal-form-row" id="uwagi-withdrawal-reason-row">
+                <label class="modal-form-label" for="uwagi-withdrawal-reason">Powód cofnięcia
+                    <span style="font-weight:400; text-transform:none; letter-spacing:0;">(puste = usuń)</span>
+                </label>
+                <input type="text" id="uwagi-withdrawal-reason" class="modal-date-input"
+                       placeholder="Powód cofnięcia...">
             </div>
             <!-- Uwagi -->
             <div class="modal-form-row">

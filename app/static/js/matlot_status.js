@@ -28,11 +28,18 @@ const _todayDmy = (() => {
 })();
 
 // Release modal state
-let _pendingCodice        = '';
-let _pendingLotto         = '';
-let _pendingBox           = '';
-let _pendingBtn           = null;
-let _pendingReleaseStatus = 'N';
+let _pendingCodice          = '';
+let _pendingLotto           = '';
+let _pendingBox             = '';
+let _pendingBtn             = null;
+let _pendingReleaseStatus   = 'N';
+let _pendingOriginalStatus  = 'N';  // status when modal was opened (bulk mode baseline)
+
+/** True when enhanced-edit is on AND the bulk-release button is enabled. */
+function isBulkMode() {
+    const btn = document.getElementById('btn-bulk-release');
+    return enhancedEdit && btn && !btn.disabled;
+}
 
 // Initialize on page load — sync from MOSYS first, then display data
 document.addEventListener('DOMContentLoaded', () => {
@@ -337,11 +344,13 @@ function buildRowHtml(record) {
            </button>`;
 
     // TASK4: uwagi edit button — always shown for all rows
-    const rs  = escapeAttr(record.release_status || 'N');
-    const pv  = escapeAttr(record.prima_vista   || '');
-    const rat = escapeAttr(record.released_at   || '');
+    const rs  = escapeAttr(record.release_status    || 'N');
+    const pv  = escapeAttr(record.prima_vista       || '');
+    const rat = escapeAttr(record.released_at       || '');
+    const wat = escapeAttr(record.withdrawn_at      || '');
+    const wre = escapeAttr(record.withdrawal_reason || '');
     const editUwagiBtn = `<button class="btn-edit-uwagi" title="Edytuj partię"
-                onclick="openUwagiModal(this, '${co}', '${lo}', '${bo}', '${uwa}', '${rs}', '${pv}', '${rat}')">
+                onclick="openUwagiModal(this, '${co}', '${lo}', '${bo}', '${uwa}', '${rs}', '${pv}', '${rat}', '${wat}', '${wre}')">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -645,6 +654,12 @@ function _dmyToIso(dmy) {
     return p.length === 3 ? `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : '';
 }
 
+/** Convert dd.mm.yyyy HH:MM → yyyy-mm-dd (strips time component first). */
+function _dmyHmToIsoDate(val) {
+    if (!val) return '';
+    return _dmyToIso(val.split(' ')[0]);
+}
+
 /** Toggle status buttons and show/hide released_at row. */
 function setUwagiStatus(status) {
     _pendingReleaseStatus = status;
@@ -657,23 +672,38 @@ function setUwagiStatus(status) {
 }
 
 /**
- * Open the batch edit modal (uwagi, status, dates).
+ * Open the batch edit modal (uwagi, status, dates, withdrawal fields).
  */
-function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, primaVista, releasedAt) {
+function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, primaVista, releasedAt, withdrawnAt, withdrawalReason) {
     _pendingCodice = codice;
     _pendingLotto  = lotto;
     _pendingBox    = box;
     _pendingBtn    = btn;
 
-    document.getElementById('uwagi-modal-label').textContent = `${codice} / ${lotto}`;
-    document.getElementById('uwagi-input').value             = currentUwagi || '';
-    document.getElementById('uwagi-prima-vista').value       = _dmyToIso(primaVista);
-    document.getElementById('uwagi-released-at').value       = _dmyToIso(releasedAt);
+    _pendingOriginalStatus = releaseStatus || 'N';
+
+    document.getElementById('uwagi-modal-label').textContent    = `${codice} / ${lotto}`;
+    document.getElementById('uwagi-input').value                = currentUwagi || '';
+    document.getElementById('uwagi-prima-vista').value          = _dmyToIso(primaVista);
+    document.getElementById('uwagi-released-at').value          = _dmyToIso(releasedAt);
+    document.getElementById('uwagi-withdrawn-at').value         = _dmyHmToIsoDate(withdrawnAt);
+    document.getElementById('uwagi-withdrawal-reason').value    = withdrawalReason || '';
+
+    // Bulk mode indicator
+    const bulk = isBulkMode();
+    const bulkIndicator = document.getElementById('uwagi-bulk-indicator');
+    if (bulkIndicator) {
+        bulkIndicator.style.display = bulk ? '' : 'none';
+        const countEl = document.getElementById('uwagi-bulk-count');
+        if (countEl) countEl.textContent = totalRecords;
+    }
 
     // Show/hide enhanced-only rows and delete button based on current mode
-    document.getElementById('uwagi-status-row').style.display      = enhancedEdit ? '' : 'none';
-    document.getElementById('uwagi-prima-vista-row').style.display = enhancedEdit ? '' : 'none';
-    document.getElementById('uwagi-delete-btn').style.display      = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-status-row').style.display          = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-prima-vista-row').style.display     = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-withdrawn-at-row').style.display    = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-withdrawal-reason-row').style.display = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-delete-btn').style.display          = enhancedEdit ? '' : 'none';
 
     setUwagiStatus(releaseStatus || 'N');
 
@@ -683,7 +713,7 @@ function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, pr
 
     const deleteBtn = document.getElementById('uwagi-delete-btn');
     deleteBtn.disabled    = false;
-    deleteBtn.textContent = 'Usuń';
+    deleteBtn.textContent = isBulkMode() ? `Usuń wszystkie (${totalRecords})` : 'Usuń';
 
     document.getElementById('uwagi-modal').classList.add('active');
     setTimeout(() => document.getElementById('uwagi-input').focus(), 100);
@@ -705,9 +735,12 @@ async function submitUwagi() {
     const codice     = _pendingCodice;
     const lotto      = _pendingLotto;
     const box        = _pendingBox;
-    const uwagi      = document.getElementById('uwagi-input').value.trim();
-    const primaVista = document.getElementById('uwagi-prima-vista').value || null;
-    const releasedAt = document.getElementById('uwagi-released-at').value || null;
+    const uwagi            = document.getElementById('uwagi-input').value.trim();
+    const primaVista       = document.getElementById('uwagi-prima-vista').value || null;
+    const releasedAt       = document.getElementById('uwagi-released-at').value || null;
+    const withdrawnAt      = document.getElementById('uwagi-withdrawn-at').value;
+    const withdrawalReason = document.getElementById('uwagi-withdrawal-reason').value;
+    const statusChanged    = _pendingReleaseStatus !== _pendingOriginalStatus;
 
     if (!codice || !lotto) return;
 
@@ -716,29 +749,52 @@ async function submitUwagi() {
     confirmBtn.textContent = 'Zapisywanie...';
 
     try {
+        // Step 1: save the single row (all fields)
         const response = await fetch('/api/matlot-status/uwagi', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
-                codice_materiale: codice,
+                codice_materiale:  codice,
                 lotto,
                 box,
                 uwagi,
-                release_status: _pendingReleaseStatus,
-                prima_vista:    primaVista,
-                released_at:    releasedAt,
+                release_status:    _pendingReleaseStatus,
+                prima_vista:       primaVista,
+                released_at:       releasedAt,
+                withdrawn_at:      withdrawnAt,
+                withdrawal_reason: withdrawalReason,
             }),
         });
         const data = await response.json();
 
-        if (data.success) {
-            closeUwagiModal();
-            fetchRecords(true);
-        } else {
+        if (!data.success) {
             alert(`Błąd: ${data.error || 'Nie udało się zapisać.'}`);
             confirmBtn.disabled    = false;
             confirmBtn.textContent = 'Zapisz';
+            return;
         }
+
+        // Step 2: bulk mode + status changed → apply status to all other filtered rows
+        // The single row already has the new status so it will be skipped by bulk-status.
+        if (isBulkMode() && statusChanged) {
+            const searchPayload = {};
+            Object.entries(searchFilters).forEach(([key, val]) => {
+                if (val && val.trim()) searchPayload[key] = val.trim();
+            });
+            await fetch('/api/matlot-status/bulk-status', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    original_status: _pendingOriginalStatus,
+                    new_status:      _pendingReleaseStatus,
+                    category:        currentCategory,
+                    search:          searchPayload,
+                }),
+            });
+        }
+
+        closeUwagiModal();
+        fetchRecords(true);
     } catch (err) {
         console.error('Error updating:', err);
         alert('Błąd połączenia — nie udało się zapisać.');
@@ -758,11 +814,26 @@ async function submitDeleteRow() {
     deleteBtn.textContent = 'Usuwanie...';
 
     try {
-        const response = await fetch('/api/matlot-status/delete', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ codice_materiale: codice, lotto, box }),
-        });
+        let response;
+        if (isBulkMode()) {
+            // Bulk delete — all rows matching current filters
+            const searchPayload = {};
+            Object.entries(searchFilters).forEach(([key, val]) => {
+                if (val && val.trim()) searchPayload[key] = val.trim();
+            });
+            response = await fetch('/api/matlot-status/bulk-delete', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ category: currentCategory, search: searchPayload }),
+            });
+        } else {
+            // Single row delete
+            response = await fetch('/api/matlot-status/delete', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ codice_materiale: codice, lotto, box }),
+            });
+        }
         const data = await response.json();
 
         if (data.success) {
@@ -771,13 +842,13 @@ async function submitDeleteRow() {
         } else {
             alert(`Błąd: ${data.error || 'Nie udało się usunąć.'}`);
             deleteBtn.disabled    = false;
-            deleteBtn.textContent = 'Usuń';
+            deleteBtn.textContent = isBulkMode() ? `Usuń wszystkie (${totalRecords})` : 'Usuń';
         }
     } catch (err) {
         console.error('Error deleting row:', err);
         alert('Błąd połączenia — nie udało się usunąć.');
         deleteBtn.disabled    = false;
-        deleteBtn.textContent = 'Usuń';
+        deleteBtn.textContent = isBulkMode() ? `Usuń wszystkie (${totalRecords})` : 'Usuń';
     }
 }
 

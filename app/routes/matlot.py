@@ -579,22 +579,28 @@ def api_matlot_uwagi():
 
     Requires: codice_materiale, lotto, box.
     Optional:
-        uwagi           — notes (empty string clears)
-        release_status  — 'N' or 'S'; switching to 'N' always clears released_at
-        prima_vista     — YYYY-MM-DD
-        released_at     — YYYY-MM-DD (ignored when release_status='N')
+        uwagi              — notes (empty string clears)
+        release_status     — 'N' or 'S'; switching to 'N' always clears released_at
+        prima_vista        — YYYY-MM-DD
+        released_at        — YYYY-MM-DD (ignored when release_status='N')
+        withdrawn_at       — YYYY-MM-DD (empty string clears / sets to None)
+        withdrawal_reason  — free text  (empty string clears / sets to None)
 
-    Withdrawal columns (withdrawn_at, withdrawal_reason) are never touched.
     When release_status changes, MOSYS is updated best-effort after commit.
     """
-    data            = request.get_json(silent=True) or {}
-    codice          = str(data.get('codice_materiale') or '').strip()
-    lotto           = str(data.get('lotto') or '').strip()
-    box             = str(data.get('box') or '').strip() or '-'
-    uwagi           = str(data.get('uwagi') or '').strip()
-    new_status      = str(data.get('release_status') or '').strip().upper() or None
-    prima_vista_str = str(data.get('prima_vista') or '').strip() or None
-    released_at_str = str(data.get('released_at') or '').strip() or None
+    data              = request.get_json(silent=True) or {}
+    codice            = str(data.get('codice_materiale') or '').strip()
+    lotto             = str(data.get('lotto') or '').strip()
+    box               = str(data.get('box') or '').strip() or '-'
+    uwagi             = str(data.get('uwagi') or '').strip()
+    new_status        = str(data.get('release_status') or '').strip().upper() or None
+    prima_vista_str   = str(data.get('prima_vista') or '').strip() or None
+    released_at_str   = str(data.get('released_at') or '').strip() or None
+    # Withdrawal fields — key presence signals intent; empty string = clear
+    _wa_raw           = data.get('withdrawn_at')
+    _wr_raw           = data.get('withdrawal_reason')
+    withdrawn_at_str  = str(_wa_raw).strip() if _wa_raw is not None else None
+    withdrawal_reason = str(_wr_raw).strip() if _wr_raw is not None else None
 
     if not codice or not lotto:
         return jsonify({'success': False, 'error': 'codice_materiale and lotto required'}), 400
@@ -642,6 +648,19 @@ def api_matlot_uwagi():
                 tracking.released_at = _parse_datetime(released_at_str)
             except (ValueError, AttributeError):
                 return jsonify({'success': False, 'error': f'Invalid released_at: {released_at_str}'}), 400
+
+        # Withdrawal fields — only touched when key was present in the payload
+        if withdrawn_at_str is not None:
+            if withdrawn_at_str == '':
+                tracking.withdrawn_at = None          # clear
+            else:
+                try:
+                    tracking.withdrawn_at = _parse_datetime(withdrawn_at_str)
+                except (ValueError, AttributeError):
+                    return jsonify({'success': False, 'error': f'Invalid withdrawn_at: {withdrawn_at_str}'}), 400
+
+        if withdrawal_reason is not None:
+            tracking.withdrawal_reason = withdrawal_reason or None   # '' → None
 
         db.session.commit()
 
@@ -784,3 +803,149 @@ def api_matlot_bulk_release():
         pass
 
     return jsonify({'success': True, 'released_count': released_count})
+
+
+# ── API: bulk status change ───────────────────────────────────────────────────
+
+@matlot_bp.route('/api/matlot-status/bulk-status', methods=['POST'])
+def api_matlot_bulk_status():
+    """Change release_status for all filtered rows whose current status matches original_status.
+
+    Rows that already have the new status (or a different status) are skipped.
+    When N→S: sets released_at = now.  When S→N: clears released_at.
+
+    Body JSON:
+        original_status — 'N' or 'S': only rows at this status are updated
+        new_status      — 'N' or 'S': target status
+        category        — 'surowce' | 'inserty' | ''
+        search          — dict of { CODICE_MATERIALE, LOTTO, BOX } search filters
+
+    Returns:
+        { success, updated_count }
+    """
+    data            = request.get_json(silent=True) or {}
+    original_status = str(data.get('original_status') or '').strip().upper()
+    new_status      = str(data.get('new_status')      or '').strip().upper()
+    category        = str(data.get('category')        or '').strip().lower()
+    search          = data.get('search') or {}
+
+    if original_status not in ('N', 'S') or new_status not in ('N', 'S'):
+        return jsonify({'success': False, 'error': 'original_status and new_status must be N or S'}), 400
+
+    if original_status == new_status:
+        return jsonify({'success': True, 'updated_count': 0})
+
+    try:
+        rows = _get_tracking_rows()
+
+        if category == 'surowce':
+            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+        elif category == 'inserty':
+            rows = [r for r in rows if r.get('is_insert')]
+
+        for col, val in search.items():
+            val = str(val or '').strip().lower()
+            if val:
+                key = VALID_SORT_FIELDS.get(col, col.lower())
+                rows = [r for r in rows if val in str(r.get(key) or '').lower()]
+
+        # Only target rows that still have original_status
+        rows = [r for r in rows if r['release_status'] == original_status]
+
+        if not rows:
+            return jsonify({'success': True, 'updated_count': 0})
+
+        now = datetime.now()
+        updated_count = 0
+
+        for row in rows:
+            tracking = MatlotTracking.query.filter_by(
+                codice_materiale=row['codice_materiale'],
+                lotto=row['lotto'],
+                box=row['box'],
+            ).first()
+            if tracking and tracking.release_status == original_status:
+                tracking.release_status = new_status
+                if new_status == 'S':
+                    tracking.released_at = now
+                else:
+                    tracking.released_at = None
+                updated_count += 1
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_bulk_status SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Best-effort MOSYS writes — one per row, failures logged and ignored
+    try:
+        from MOSYS_data_functions import update_matlot_lotto_status
+        for row in rows:
+            try:
+                update_matlot_lotto_status(row['codice_materiale'], row['lotto'], new_status)
+            except Exception as mosys_err:
+                current_app.logger.warning(
+                    f"MOSYS bulk-status write failed for "
+                    f"{row['codice_materiale']}/{row['lotto']}: {mosys_err}"
+                )
+    except Exception:
+        pass
+
+    return jsonify({'success': True, 'updated_count': updated_count})
+
+
+# ── API: bulk delete ──────────────────────────────────────────────────────────
+
+@matlot_bp.route('/api/matlot-status/bulk-delete', methods=['POST'])
+def api_matlot_bulk_delete():
+    """Delete all rows that match the current category + search filters.
+
+    Body JSON:
+        category — 'surowce' | 'inserty' | ''
+        search   — dict of { CODICE_MATERIALE, LOTTO, BOX } search filters
+
+    Returns:
+        { success, deleted_count }
+    """
+    data     = request.get_json(silent=True) or {}
+    category = str(data.get('category') or '').strip().lower()
+    search   = data.get('search') or {}
+
+    try:
+        rows = _get_tracking_rows()
+
+        if category == 'surowce':
+            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+        elif category == 'inserty':
+            rows = [r for r in rows if r.get('is_insert')]
+
+        for col, val in search.items():
+            val = str(val or '').strip().lower()
+            if val:
+                key = VALID_SORT_FIELDS.get(col, col.lower())
+                rows = [r for r in rows if val in str(r.get(key) or '').lower()]
+
+        if not rows:
+            return jsonify({'success': False, 'error': 'Brak pasujących rekordów do usunięcia'}), 404
+
+        deleted_count = 0
+        for row in rows:
+            tracking = MatlotTracking.query.filter_by(
+                codice_materiale=row['codice_materiale'],
+                lotto=row['lotto'],
+                box=row['box'],
+            ).first()
+            if tracking:
+                db.session.delete(tracking)
+                deleted_count += 1
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_bulk_delete SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({'success': True, 'deleted_count': deleted_count})
