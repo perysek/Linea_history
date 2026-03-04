@@ -187,8 +187,7 @@ def _sync_from_mosys():
                     f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='{release_status}'"
                 )
             else:
-                # Refresh cached quantity only; box is the key so it doesn't change
-                tracking.giacenza_lotto = giacenza
+                pass  # existing row — no fields refreshed on re-sync
 
     try:
         db.session.commit()
