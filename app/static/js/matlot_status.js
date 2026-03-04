@@ -20,6 +20,12 @@ let hasMoreRecords = false;
 // Enhanced edit mode — toggled via the sidebar version button; persisted in localStorage
 let enhancedEdit = localStorage.getItem('matlot-enhanced-edit') === '1';
 
+// Today's date in dd.mm.yyyy — used to detect new rows added on current day
+const _todayDmy = (() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+})();
+
 // Release modal state
 let _pendingCodice        = '';
 let _pendingLotto         = '';
@@ -204,6 +210,7 @@ async function fetchRecords(resetOffset = true) {
             updateCount(allRecords.length, totalRecords);
             updateLoadMoreButton(data.pagination);
             updatePastDuePill(data.past_due_count);
+            updateNewRowsPill(data.new_count || 0);
         } else {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych z MOSYS</td></tr>';
         }
@@ -243,7 +250,8 @@ function buildRowHtml(record) {
     const giorniHide   = isInserty || record.giorni_disabled;
 
     // TASK2: no alert row classes for inserty category
-    const rowClass = isInserty
+    const isNew = record.prima_vista === _todayDmy;
+    const rowClass = (isInserty
         ? 'stagger-row'
         : isReleased
             ? 'stagger-row row-released'
@@ -251,7 +259,8 @@ function buildRowHtml(record) {
                 ? 'stagger-row row-past-due'
                 : record.giorni >= 2
                     ? 'stagger-row row-warning'
-                    : 'stagger-row';
+                    : 'stagger-row')
+        + (isNew ? ' row-new' : '');
 
     const giorniLabel = record.giorni === 0
         ? 'dziś'
@@ -416,6 +425,17 @@ function updatePastDuePill(pastDueCount) {
     // TASK2: no past-due alerting for inserty
     if (pastDueCount > 0 && currentStatus !== 'S' && currentCategory !== 'inserty') {
         pill.textContent   = `${pastDueCount} po terminie`;
+        pill.style.display = '';
+    } else {
+        pill.style.display = 'none';
+    }
+}
+
+function updateNewRowsPill(newCount) {
+    const pill = document.getElementById('new-rows-pill');
+    if (!pill) return;
+    if (newCount > 0) {
+        pill.textContent   = `${newCount} ${newCount === 1 ? 'nowa' : 'nowych'}`;
         pill.style.display = '';
     } else {
         pill.style.display = 'none';
