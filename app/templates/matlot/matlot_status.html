@@ -631,11 +631,17 @@
                           placeholder="Dodaj uwagi..."></textarea>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-modal-cancel" onclick="closeUwagiModal()">Anuluj</button>
-            <button class="btn-modal-confirm" id="uwagi-confirm-btn" onclick="submitUwagi()">
-                Zapisz
+        <div class="modal-footer" style="justify-content: space-between;">
+            <button class="btn-modal-confirm-danger" id="uwagi-delete-btn"
+                    onclick="submitDeleteRow()" style="display: none;">
+                Usuń
             </button>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-modal-cancel" onclick="closeUwagiModal()">Anuluj</button>
+                <button class="btn-modal-confirm" id="uwagi-confirm-btn" onclick="submitUwagi()">
+                    Zapisz
+                </button>
+            </div>
         </div>
     </div>
 </div>

@@ -602,9 +602,10 @@ function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, pr
     document.getElementById('uwagi-prima-vista').value       = _dmyToIso(primaVista);
     document.getElementById('uwagi-released-at').value       = _dmyToIso(releasedAt);
 
-    // Show/hide enhanced-only rows based on current mode
+    // Show/hide enhanced-only rows and delete button based on current mode
     document.getElementById('uwagi-status-row').style.display      = enhancedEdit ? '' : 'none';
     document.getElementById('uwagi-prima-vista-row').style.display = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-delete-btn').style.display      = enhancedEdit ? '' : 'none';
 
     setUwagiStatus(releaseStatus || 'N');
 
@@ -671,6 +672,40 @@ async function submitUwagi() {
         alert('Błąd połączenia — nie udało się zapisać.');
         confirmBtn.disabled    = false;
         confirmBtn.textContent = 'Zapisz';
+    }
+}
+
+async function submitDeleteRow() {
+    const codice = _pendingCodice;
+    const lotto  = _pendingLotto;
+    const box    = _pendingBox;
+    if (!codice || !lotto) return;
+
+    const deleteBtn = document.getElementById('uwagi-delete-btn');
+    deleteBtn.disabled    = true;
+    deleteBtn.textContent = 'Usuwanie...';
+
+    try {
+        const response = await fetch('/api/matlot-status/delete', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ codice_materiale: codice, lotto, box }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            closeUwagiModal();
+            fetchRecords(true);
+        } else {
+            alert(`Błąd: ${data.error || 'Nie udało się usunąć.'}`);
+            deleteBtn.disabled    = false;
+            deleteBtn.textContent = 'Usuń';
+        }
+    } catch (err) {
+        console.error('Error deleting row:', err);
+        alert('Błąd połączenia — nie udało się usunąć.');
+        deleteBtn.disabled    = false;
+        deleteBtn.textContent = 'Usuń';
     }
 }
 

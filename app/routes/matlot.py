@@ -601,6 +601,41 @@ def api_matlot_uwagi():
     return jsonify({'success': True})
 
 
+# ── API: delete row ───────────────────────────────────────────────────────────
+
+@matlot_bp.route('/api/matlot-status/delete', methods=['POST'])
+def api_matlot_delete():
+    """Delete a tracking row from SQLite. No MOSYS update.
+
+    Requires: codice_materiale, lotto, box.
+    """
+    data   = request.get_json(silent=True) or {}
+    codice = str(data.get('codice_materiale') or '').strip()
+    lotto  = str(data.get('lotto') or '').strip()
+    box    = str(data.get('box') or '').strip() or '-'
+
+    if not codice or not lotto:
+        return jsonify({'success': False, 'error': 'codice_materiale and lotto required'}), 400
+
+    try:
+        tracking = MatlotTracking.query.filter_by(
+            codice_materiale=codice, lotto=lotto, box=box
+        ).first()
+
+        if not tracking:
+            return jsonify({'success': False, 'error': 'Batch not found in tracking'}), 404
+
+        db.session.delete(tracking)
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_delete SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({'success': True})
+
+
 # ── API: bulk release ─────────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/bulk-release', methods=['POST'])
