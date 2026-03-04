@@ -385,12 +385,23 @@ def api_matlot_status():
 
         total_count = len(rows)
 
-        sort_key = VALID_SORT_FIELDS.get(sort_field, 'codice_materiale')
-        reverse  = sort_dir == 'desc'
+        sort_key     = VALID_SORT_FIELDS.get(sort_field, 'codice_materiale')
+        reverse      = sort_dir == 'desc'
         numeric_keys = {'giacenza_lotto', 'giorni'}
+        date_keys    = {'prima_vista', 'released_at'}
+
+        def _dmy_key(s):
+            """Convert dd.mm.yyyy → (yyyy, mm, dd) tuple for correct date ordering."""
+            try:
+                d, m, y = str(s).split('.')
+                return (int(y), int(m), int(d))
+            except (ValueError, AttributeError):
+                return (0, 0, 0)
 
         if sort_key in numeric_keys:
             rows.sort(key=lambda r: r.get(sort_key) or 0, reverse=reverse)
+        elif sort_key in date_keys:
+            rows.sort(key=lambda r: _dmy_key(r.get(sort_key) or ''), reverse=reverse)
         else:
             rows.sort(key=lambda r: str(r.get(sort_key) or '').lower(), reverse=reverse)
 
