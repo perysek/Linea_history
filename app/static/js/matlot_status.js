@@ -264,7 +264,7 @@ function buildRowHtml(record) {
             <span style="display:block; font-size:0.625rem; color:var(--color-ink-muted); margin-top:0.1rem;">
                 cofnięto ${escapeHtml(record.withdrawn_at)}
             </span>`;
-    } else if (record.release_status === 'S' && record.uwagi) {
+    } else if (record.uwagi) {
         uwagiCellContent = escapeHtml(record.uwagi);
     }
 
@@ -276,7 +276,7 @@ function buildRowHtml(record) {
                <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
                </svg>
-               Zatwierdzony
+               OK
            </button>`
         : `<button class="btn-release"
                    onclick="openReleaseModal(this, '${co}', '${lo}', '${bo}')">
@@ -315,7 +315,7 @@ function buildRowHtml(record) {
                 ${giorniHide ? '' : `<span class="badge-giorni">${escapeHtml(giorniLabel)}</span>`}
             </td>
             <td style="text-align: center;">
-                <div style="display: inline-flex; align-items: center; gap: 0.25rem;">
+                <div style="display: inline-flex; align-items: left; gap: 0.15rem;">
                     ${primaryAction}
                     ${editUwagiBtn}
                 </div>
