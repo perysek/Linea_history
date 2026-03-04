@@ -17,6 +17,9 @@ let totalRecords  = 0;
 const RECORDS_PER_PAGE = 100;
 let hasMoreRecords = false;
 
+// Enhanced edit mode — toggled via the sidebar version button; persisted in localStorage
+let enhancedEdit = localStorage.getItem('matlot-enhanced-edit') === '1';
+
 // Release modal state
 let _pendingCodice        = '';
 let _pendingLotto         = '';
@@ -27,6 +30,17 @@ let _pendingReleaseStatus = 'N';
 // Initialize on page load — sync from MOSYS first, then display data
 document.addEventListener('DOMContentLoaded', () => {
     syncFromMosys().then(() => fetchRecords());
+
+    // Wire enhanced-edit toggle button (sidebar footer, next to v1.0.0)
+    const toggleBtn = document.getElementById('toggle-enhanced-edit');
+    if (toggleBtn) {
+        toggleBtn.style.opacity = enhancedEdit ? '0.55' : '0.15';
+        toggleBtn.addEventListener('click', () => {
+            enhancedEdit = !enhancedEdit;
+            localStorage.setItem('matlot-enhanced-edit', enhancedEdit ? '1' : '0');
+            toggleBtn.style.opacity = enhancedEdit ? '0.55' : '0.15';
+        });
+    }
 
     // Infinite scroll on table body
     const tbodyScroll = document.querySelector('.tbody-scroll');
@@ -568,8 +582,9 @@ function setUwagiStatus(status) {
     _pendingReleaseStatus = status;
     document.getElementById('uwagi-status-N').classList.toggle('active', status === 'N');
     document.getElementById('uwagi-status-S').classList.toggle('active', status === 'S');
-    const releasedRow = document.getElementById('uwagi-released-at-row');
-    releasedRow.style.display = status === 'S' ? '' : 'none';
+    // released_at only visible when enhanced mode is on AND status is S
+    document.getElementById('uwagi-released-at-row').style.display =
+        (enhancedEdit && status === 'S') ? '' : 'none';
     if (status === 'N') document.getElementById('uwagi-released-at').value = '';
 }
 
@@ -586,6 +601,10 @@ function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, pr
     document.getElementById('uwagi-input').value             = currentUwagi || '';
     document.getElementById('uwagi-prima-vista').value       = _dmyToIso(primaVista);
     document.getElementById('uwagi-released-at').value       = _dmyToIso(releasedAt);
+
+    // Show/hide enhanced-only rows based on current mode
+    document.getElementById('uwagi-status-row').style.display      = enhancedEdit ? '' : 'none';
+    document.getElementById('uwagi-prima-vista-row').style.display = enhancedEdit ? '' : 'none';
 
     setUwagiStatus(releaseStatus || 'N');
 
