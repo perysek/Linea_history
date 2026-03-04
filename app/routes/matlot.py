@@ -169,23 +169,32 @@ def _sync_from_mosys():
             ).first()
 
             if tracking is None:
-                # Seed with MOSYS's actual status so pre-existing released
-                # batches don't appear as new pending items.
-                mosys_status = str(row.get('LOTTO_VERIFICATO') or '').strip()
-                release_status = mosys_status if mosys_status in ('N', 'S') else 'N'
-
+                # Always seed as 'N' (pending). MOSYS incorrectly defaults
+                # LOTTO_VERIFICATO='S' for every new batch, so its value is
+                # not reliable for seeding. LINEA is the source of truth.
                 tracking = MatlotTracking(
                     codice_materiale=codice,
                     lotto=lotto,
                     box=box,
                     prima_vista=today,
-                    release_status=release_status,
+                    release_status='N',
                     giacenza_lotto=giacenza,
                 )
                 db.session.add(tracking)
                 current_app.logger.info(
-                    f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='{release_status}'"
+                    f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='N'"
                 )
+                # Best-effort: correct MOSYS status from its default 'S' → 'N'
+                mosys_status = str(row.get('LOTTO_VERIFICATO') or '').strip()
+                if mosys_status == 'S':
+                    try:
+                        from MOSYS_data_functions import update_matlot_lotto_status
+                        update_matlot_lotto_status(codice, lotto, 'N')
+                    except Exception as mosys_err:
+                        current_app.logger.warning(
+                            f"MATLOT could not reset MOSYS status for new batch "
+                            f"{codice}/{lotto}@{box}: {mosys_err}"
+                        )
             else:
                 pass  # existing row — no fields refreshed on re-sync
 
