@@ -129,6 +129,11 @@ def _sync_from_mosys():
             if codice not in _insert_codes and not codice.lower().startswith('t'):
                 continue
 
+            # Skip insert batches whose LOTTO starts with '0AV' — these are
+            # bulk-handled outside LINEA and should not appear in the tracking table.
+            if codice in _insert_codes and lotto.startswith('0AV'):
+                continue
+
             # Step 2: Skip auto-approved batches — delete any stale SQLite rows
             # for them and do not add them to mosys_keys or tracking.
             if _is_auto_approved(codice, lotto):
@@ -254,6 +259,7 @@ def _get_tracking_rows():
             and t.release_status == 'N'
             and t.withdrawn_at is not None
         )
+        is_withdrawn = (t.withdrawn_at is not None) or bool(t.withdrawal_reason)
         result.append({
             'codice_materiale': t.codice_materiale,
             'nome_commerciale': _material_names.get(t.codice_materiale, ''),
@@ -265,6 +271,7 @@ def _get_tracking_rows():
             'giorni':           giorni,
             'giorni_disabled':  giorni_disabled,
             'is_past_due':      is_surowce and t.release_status == 'N' and giorni > 2 and not giorni_disabled,
+            'is_withdrawn':     is_withdrawn,
             'release_status':   t.release_status,
             'released_at':      released_at_str,
             'withdrawn_at':     withdrawn_at_str,
@@ -339,10 +346,11 @@ def api_matlot_refresh():
 @matlot_bp.route('/api/matlot-status')
 def api_matlot_status():
     """Return matlot_tracking rows (SQLite only — no MOSYS call)."""
-    sort_field = request.args.get('sort', 'CODICE_MATERIALE')
-    sort_dir   = request.args.get('dir', 'asc')
-    limit      = request.args.get('limit', 100, type=int)
-    offset     = request.args.get('offset', 0, type=int)
+    sort_field    = request.args.get('sort', 'CODICE_MATERIALE')
+    sort_dir      = request.args.get('dir', 'asc')
+    limit         = request.args.get('limit', 100, type=int)
+    offset        = request.args.get('offset', 0, type=int)
+    priority_first = request.args.get('priority_first', 'false').lower() == 'true'
 
     category = request.args.get('category', '').strip().lower()
     status   = request.args.get('status', 'N').strip().upper()
@@ -371,17 +379,25 @@ def api_matlot_status():
 
         # Badge counts — always from pending items in current category,
         # independent of which status tab is active.
-        pending_rows   = [r for r in rows if r['release_status'] == 'N']
-        past_due_count = sum(1 for r in pending_rows if r['is_past_due'])
-        new_count      = sum(1 for r in pending_rows if r['prima_vista'] == today_str)
-        urgent_count   = sum(1 for r in pending_rows if r['is_past_due'] or r['prima_vista'] == today_str)
+        pending_rows    = [r for r in rows if r['release_status'] == 'N']
+        past_due_count  = sum(1 for r in pending_rows if r['is_past_due'])
+        new_count       = sum(1 for r in pending_rows if r['prima_vista'] == today_str)
+        urgent_count    = sum(1 for r in pending_rows if r['is_past_due'] or r['prima_vista'] == today_str)
+        withdrawn_count = sum(1 for r in rows if r.get('is_withdrawn'))
 
-        # Status / Pilne filter
+        # Status / Pilne / badge-filter
         if status in ('N', 'S'):
             rows = [r for r in rows if r['release_status'] == status]
         elif status == 'PILNE':
             rows = [r for r in rows if r['release_status'] == 'N'
                     and (r['is_past_due'] or r['prima_vista'] == today_str)]
+        elif status == 'PAST_DUE':
+            rows = [r for r in rows if r['is_past_due']]
+        elif status == 'NEW_TODAY':
+            rows = [r for r in rows if r['prima_vista'] == today_str
+                    and r['release_status'] == 'N']
+        elif status == 'WITHDRAWN':
+            rows = [r for r in rows if r.get('is_withdrawn')]
 
         total_count = len(rows)
 
@@ -405,14 +421,29 @@ def api_matlot_status():
         else:
             rows.sort(key=lambda r: str(r.get(sort_key) or '').lower(), reverse=reverse)
 
+        # Priority-first: stable secondary sort puts red/yellow/grey rows on top.
+        # Within each priority group the user's chosen sort order is preserved
+        # because Python's sort() is stable.
+        if priority_first:
+            def _row_priority(r):
+                if r['is_past_due']:
+                    return 0   # red
+                if r.get('is_withdrawn'):
+                    return 1   # grey
+                if r['release_status'] == 'N' and r.get('giorni', 0) >= 2 and not r.get('giorni_disabled'):
+                    return 2   # yellow
+                return 3       # normal
+            rows.sort(key=_row_priority)
+
         page = rows[offset: offset + limit]
 
         return jsonify({
-            'success':        True,
-            'rows':           page,
-            'past_due_count': past_due_count,
-            'new_count':      new_count,
-            'urgent_count':   urgent_count,
+            'success':         True,
+            'rows':            page,
+            'past_due_count':  past_due_count,
+            'new_count':       new_count,
+            'urgent_count':    urgent_count,
+            'withdrawn_count': withdrawn_count,
             'pagination': {
                 'total':    total_count,
                 'limit':    limit,

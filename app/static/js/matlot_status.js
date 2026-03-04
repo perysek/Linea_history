@@ -4,6 +4,7 @@
  */
 
 let currentSort     = { field: 'CODICE_MATERIALE', direction: 'asc' };
+let sortExplicit    = false;   // true once user explicitly clicks a sort column
 let searchFilters   = {};
 let currentCategory = 'surowce';   // 'surowce' or 'inserty'
 let currentStatus   = 'N';  // 'N' (pending), 'S' (released), or 'ALL'
@@ -90,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function setCategory(cat) {
     currentCategory = cat;
+    sortExplicit    = false;   // re-enable priority-first on view switch
     document.getElementById('cat-surowce').classList.toggle('active', cat === 'surowce');
     document.getElementById('cat-inserty').classList.toggle('active', cat === 'inserty');
 
@@ -104,16 +106,34 @@ function setCategory(cat) {
 }
 
 /**
- * Set active status view (Oczekujące / Zatwierdzone / Wszystkie) and refetch
+ * Set active status view (Oczekujące / Zatwierdzone / Wszystkie / Pilne / badge filters)
+ * and refetch. Badge-filter stats: 'PAST_DUE', 'NEW_TODAY', 'WITHDRAWN'.
  */
 function setStatus(stat) {
     currentStatus = stat;
+    sortExplicit  = false;   // re-enable priority-first on view switch
+    const badgeStats = new Set(['PAST_DUE', 'NEW_TODAY', 'WITHDRAWN']);
+    // Regular toggle buttons: active only when a non-badge stat is selected
     document.getElementById('stat-pending').classList.toggle('active',  stat === 'N');
     document.getElementById('stat-released').classList.toggle('active', stat === 'S');
     document.getElementById('stat-all').classList.toggle('active',      stat === 'ALL');
     document.getElementById('stat-pilne').classList.toggle('active',    stat === 'PILNE');
+    // Badge pills: active when their specific filter is selected
+    const pastDuePill  = document.getElementById('past-due-pill');
+    const newRowsPill  = document.getElementById('new-rows-pill');
+    const withdrawnPill = document.getElementById('withdrawn-pill');
+    if (pastDuePill)   pastDuePill.classList.toggle('pill-active',   stat === 'PAST_DUE');
+    if (newRowsPill)   newRowsPill.classList.toggle('pill-active',   stat === 'NEW_TODAY');
+    if (withdrawnPill) withdrawnPill.classList.toggle('pill-active', stat === 'WITHDRAWN');
     updateBulkReleaseButton();
     fetchRecords(true);
+}
+
+/**
+ * Toggle a badge-based filter. Clicking an active badge deactivates it (back to 'N').
+ */
+function toggleBadgeFilter(badgeStat) {
+    setStatus(currentStatus === badgeStat ? 'N' : badgeStat);
 }
 
 /**
@@ -177,6 +197,7 @@ async function fetchRecords(resetOffset = true) {
     params.append('sort', currentSort.field);
     params.append('dir', currentSort.direction);
     params.append('status', currentStatus);
+    params.append('priority_first', sortExplicit ? 'false' : 'true');
     if (currentCategory) params.append('category', currentCategory);
 
     Object.entries(searchFilters).forEach(([key, value]) => {
@@ -213,6 +234,7 @@ async function fetchRecords(resetOffset = true) {
             updatePastDuePill(data.past_due_count);
             updateNewRowsPill(data.new_count || 0);
             updatePilneButton(data.urgent_count || 0);
+            updateWithdrawnPill(data.withdrawn_count || 0);
         } else {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--color-error);">Błąd ładowania danych z MOSYS</td></tr>';
         }
@@ -252,16 +274,19 @@ function buildRowHtml(record) {
     const giorniHide   = isInserty || record.giorni_disabled;
 
     // TASK2: no alert row classes for inserty category
-    const isNew = record.prima_vista === _todayDmy && record.release_status === 'N';
+    const isNew      = record.prima_vista === _todayDmy && record.release_status === 'N';
+    const isWithdrawn = record.is_withdrawn;
     const rowClass = (isInserty
         ? 'stagger-row'
         : isReleased
             ? 'stagger-row row-released'
-            : record.is_past_due
-                ? 'stagger-row row-past-due'
-                : record.giorni >= 2
-                    ? 'stagger-row row-warning'
-                    : 'stagger-row')
+            : isWithdrawn
+                ? 'stagger-row row-withdrawn'
+                : record.is_past_due
+                    ? 'stagger-row row-past-due'
+                    : record.giorni >= 2
+                        ? 'stagger-row row-warning'
+                        : 'stagger-row')
         + (isNew ? ' row-new' : '');
 
     const giorniLabel = record.giorni === 0
@@ -279,7 +304,6 @@ function buildRowHtml(record) {
     const uwa = escapeAttr(record.uwagi || '');
 
     // Uwagi column — 3-way branch based on row state
-    const isWithdrawn = record.release_status === 'N' && record.withdrawn_at;
     let uwagiCellContent = '';
     if (isWithdrawn) {
         const reason = record.withdrawal_reason
@@ -398,6 +422,7 @@ function sortTable(field) {
         currentSort.field = field;
         currentSort.direction = 'asc';
     }
+    sortExplicit = true;
     fetchRecords(true);
 }
 
@@ -451,6 +476,17 @@ function updatePilneButton(urgentCount) {
     // If currently in PILNE view and nothing urgent remains, drop back to N
     if (urgentCount === 0 && currentStatus === 'PILNE') {
         setStatus('N');
+    }
+}
+
+function updateWithdrawnPill(withdrawnCount) {
+    const pill = document.getElementById('withdrawn-pill');
+    if (!pill) return;
+    if (withdrawnCount > 0) {
+        pill.textContent   = `${withdrawnCount} ${withdrawnCount === 1 ? 'cofnięta' : 'cofniętych'}`;
+        pill.style.display = '';
+    } else {
+        pill.style.display = 'none';
     }
 }
 
