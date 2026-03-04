@@ -17,9 +17,11 @@ from app.models.matlot import MatlotTracking
 
 matlot_bp = Blueprint('matlot', __name__)
 
-# In-memory cache: codice_materiale → NOME_COMMERCIALE from MATPRI.
-# Populated during MOSYS sync; persists for the lifetime of the process.
+# In-memory caches populated during MOSYS sync; persist for process lifetime.
+# _material_names: codice_materiale → display name (MATPRI or INSERTI)
+# _insert_codes:   set of codice_materiale values found in INSERTI (= are inserts)
 _material_names: dict = {}
+_insert_codes:   set  = set()
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,18 +99,34 @@ def _sync_from_mosys():
     mosys_keys = set()  # (codice, lotto, box) tuples seen in this sync
 
     if df is not None and not df.empty:
-        # Build material-name cache from this sync's data (MATPRI JOIN).
-        global _material_names
+        # Build caches from this sync's JOIN data.
+        # NOME_COMMERCIALE comes from MATPRI (surowce); INSERTI_DESCRIZIONE from
+        # INSERTI (inserty). Whichever is non-empty wins for the name cache.
+        # Any code matched by INSERTI is authoritative as an insert.
+        global _material_names, _insert_codes
+        _insert_codes = set()
         for _, row in df.iterrows():
-            codice_key = str(row.get('CODICE_MATERIALE') or '').strip()
-            nome = str(row.get('NOME_COMMERCIALE') or '').strip()
-            if codice_key and nome:
-                _material_names[codice_key] = nome
+            codice_key    = str(row.get('CODICE_MATERIALE')    or '').strip()
+            nome          = str(row.get('NOME_COMMERCIALE')    or '').strip()
+            inserti_desc  = str(row.get('INSERTI_DESCRIZIONE') or '').strip()
+            if not codice_key:
+                continue
+            if inserti_desc:
+                _insert_codes.add(codice_key)
+            display_name = nome or inserti_desc
+            if display_name:
+                _material_names[codice_key] = display_name
 
         for _, row in df.iterrows():
             codice = str(row.get('CODICE_MATERIALE') or '').strip()
             lotto  = str(row.get('LOTTO') or '').strip()
             if not codice or not lotto:
+                continue
+
+            # Skip codes that are neither a known insert (in INSERTI) nor a
+            # surowiec (t-prefix). These are unrelated MATLOT rows not tracked
+            # by this application.
+            if codice not in _insert_codes and not codice.lower().startswith('t'):
                 continue
 
             # Step 2: Skip auto-approved batches — delete any stale SQLite rows
@@ -233,6 +251,7 @@ def _get_tracking_rows():
         result.append({
             'codice_materiale': t.codice_materiale,
             'nome_commerciale': _material_names.get(t.codice_materiale, ''),
+            'is_insert':        t.codice_materiale in _insert_codes,
             'lotto':            t.lotto,
             'giacenza_lotto':   t.giacenza_lotto or 0,
             'box':              t.box or '-',
@@ -355,7 +374,7 @@ def api_matlot_status():
         if category == 'surowce':
             rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
         elif category == 'inserty':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('i')]
+            rows = [r for r in rows if r.get('is_insert')]
 
         for col, val in search.items():
             if val:
@@ -578,7 +597,7 @@ def api_matlot_bulk_release():
         if category == 'surowce':
             rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
         elif category == 'inserty':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('i')]
+            rows = [r for r in rows if r.get('is_insert')]
 
         # Same column search filter as the list endpoint
         for col, val in search.items():
