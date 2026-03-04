@@ -197,8 +197,6 @@ def _sync_from_mosys():
         current_app.logger.error(f"MATLOT _sync_from_mosys: {msg}")
         return 0, msg
 
-    _cleanup_tracking(mosys_keys)
-
     return len(mosys_keys), None
 
 
@@ -266,24 +264,6 @@ def _get_tracking_rows():
         })
     return result
 
-
-def _cleanup_tracking(active_mosys_keys: set):
-    """Delete tracking rows for batches gone from MOSYS AND already released.
-
-    active_mosys_keys is a set of (codice, lotto, box) tuples seen in the
-    latest MOSYS sync.
-    """
-    try:
-        stale = MatlotTracking.query.all()
-        for t in stale:
-            key = (t.codice_materiale, t.lotto, t.box or '-')
-            if key not in active_mosys_keys:
-                if t.release_status == 'S':
-                    db.session.delete(t)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"MATLOT cleanup error: {e}")
 
 
 # ── page route ────────────────────────────────────────────────────────────────
