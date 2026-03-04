@@ -613,6 +613,10 @@ function openUwagiModal(btn, codice, lotto, box, currentUwagi, releaseStatus, pr
     confirmBtn.disabled    = false;
     confirmBtn.textContent = 'Zapisz';
 
+    const deleteBtn = document.getElementById('uwagi-delete-btn');
+    deleteBtn.disabled    = false;
+    deleteBtn.textContent = 'Usuń';
+
     document.getElementById('uwagi-modal').classList.add('active');
     setTimeout(() => document.getElementById('uwagi-input').focus(), 100);
 }
