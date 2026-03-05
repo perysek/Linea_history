@@ -99,20 +99,35 @@ def _sync_from_mosys():
     mosys_keys = set()  # (codice, lotto, box) tuples seen in this sync
 
     if df is not None and not df.empty:
-        # Build caches from this sync's JOIN data.
-        # NOME_COMMERCIALE comes from MATPRI (surowce); INSERTI_DESCRIZIONE from
-        # INSERTI (inserty). Whichever is non-empty wins for the name cache.
-        # Any code matched by INSERTI is authoritative as an insert.
         global _material_names, _insert_codes
-        _insert_codes = set()
+
+        # Load complete INSERTI code list directly — authoritative for insert detection.
+        # The JOIN in get_matlot_batches() only captures codes already in MATLOT, so a
+        # brand-new MATLOT row whose CODICE_MATERIALE is in INSERTI would be missed if
+        # we relied solely on the JOIN result for the first pass.
+        try:
+            from MOSYS_data_functions import get_insert_codes
+            _insert_codes = get_insert_codes()
+            current_app.logger.info(
+                f"MATLOT sync: loaded {len(_insert_codes)} insert codes from INSERTI"
+            )
+        except Exception as e:
+            current_app.logger.warning(f"MATLOT sync: INSERTI lookup failed, falling back to JOIN: {e}")
+            # Fallback: build _insert_codes from the JOIN result as before
+            _insert_codes = set()
+            for _, row in df.iterrows():
+                codice_key   = str(row.get('CODICE_MATERIALE')    or '').strip()
+                inserti_desc = str(row.get('INSERTI_DESCRIZIONE') or '').strip()
+                if codice_key and inserti_desc:
+                    _insert_codes.add(codice_key)
+
+        # Build _material_names from the JOIN data (NOME_COMMERCIALE / INSERTI_DESCRIZIONE).
         for _, row in df.iterrows():
-            codice_key    = str(row.get('CODICE_MATERIALE')    or '').strip()
-            nome          = str(row.get('NOME_COMMERCIALE')    or '').strip()
-            inserti_desc  = str(row.get('INSERTI_DESCRIZIONE') or '').strip()
+            codice_key   = str(row.get('CODICE_MATERIALE')    or '').strip()
+            nome         = str(row.get('NOME_COMMERCIALE')    or '').strip()
+            inserti_desc = str(row.get('INSERTI_DESCRIZIONE') or '').strip()
             if not codice_key:
                 continue
-            if inserti_desc:
-                _insert_codes.add(codice_key)
             display_name = nome or inserti_desc
             if display_name:
                 _material_names[codice_key] = display_name
@@ -214,6 +229,29 @@ def _sync_from_mosys():
     return len(mosys_keys), None
 
 
+def _ensure_caches_loaded():
+    """Populate _insert_codes from MOSYS INSERTI when the cache is empty.
+
+    Called lazily before every data read. Covers the common case where the server
+    was restarted and no full sync has been triggered yet. A full sync via
+    _sync_from_mosys() also populates _material_names (display names); this
+    function only fills _insert_codes so category detection is correct immediately.
+    """
+    global _insert_codes
+    if _insert_codes:
+        return  # already populated — no work needed
+    try:
+        from MOSYS_data_functions import get_insert_codes
+        codes = get_insert_codes()
+        if codes:
+            _insert_codes = codes
+            current_app.logger.info(
+                f"MATLOT _ensure_caches_loaded: {len(_insert_codes)} insert codes loaded from INSERTI"
+            )
+    except Exception as e:
+        current_app.logger.warning(f"MATLOT _ensure_caches_loaded failed (non-fatal): {e}")
+
+
 def _get_tracking_rows():
     """Read all matlot_tracking rows from SQLite. No MOSYS call.
 
@@ -226,12 +264,14 @@ def _get_tracking_rows():
         giorni, giorni_disabled, is_past_due, release_status, released_at,
         withdrawn_at, withdrawal_reason, uwagi
     """
+    _ensure_caches_loaded()  # lazy-populate _insert_codes if empty (e.g. after restart)
     today = date.today()
     rows = MatlotTracking.query.all()
     result = []
     for t in rows:
         prima_vista = t.prima_vista
-        is_surowce = t.codice_materiale.lower().startswith('t')
+        is_insert  = t.codice_materiale in _insert_codes
+        is_surowce = (not is_insert) and t.codice_materiale.lower().startswith('t')
 
         # Giorni calculation — only meaningful for surowce ('t' prefix) rows.
         # S status: count days the batch waited until approval (released_at − prima_vista).
@@ -263,7 +303,7 @@ def _get_tracking_rows():
         result.append({
             'codice_materiale': t.codice_materiale,
             'nome_commerciale': _material_names.get(t.codice_materiale, ''),
-            'is_insert':        t.codice_materiale in _insert_codes,
+            'is_insert':        is_insert,
             'lotto':            t.lotto,
             'giacenza_lotto':   t.giacenza_lotto or 0,
             'box':              t.box or '-',

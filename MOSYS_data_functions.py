@@ -639,6 +639,28 @@ def auto_approve_matlot_batches() -> int:
 		return 0
 
 
+def get_insert_codes() -> set:
+	"""Return the set of all CODICE values from STAAMPDB.INSERTI.
+
+	Used by _ensure_caches_loaded() in matlot.py to populate _insert_codes
+	immediately after a server restart without requiring a full sync.
+
+	Returns:
+	    set of codice strings (stripped); empty set on error.
+	"""
+	query = "SELECT CODICE FROM STAAMPDB.INSERTI"
+	try:
+		df = get_pervasive(query)
+		if df is None or df.empty:
+			return set()
+		return {str(row.get('CODICE') or '').strip()
+		        for _, row in df.iterrows()
+		        if str(row.get('CODICE') or '').strip()}
+	except Exception as e:
+		print(f"Error fetching INSERTI codes: {e}")
+		return set()
+
+
 def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: str) -> bool:
 	"""Write release status back to MOSYS MATLOT.LOTTO_VERIFICATO.
 
