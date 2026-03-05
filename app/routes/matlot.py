@@ -304,6 +304,7 @@ def _get_tracking_rows():
             'codice_materiale': t.codice_materiale,
             'nome_commerciale': _material_names.get(t.codice_materiale, ''),
             'is_insert':        is_insert,
+            'is_surowce':       is_surowce,
             'lotto':            t.lotto,
             'giacenza_lotto':   t.giacenza_lotto or 0,
             'box':              t.box or '-',
@@ -407,7 +408,7 @@ def api_matlot_status():
 
         # Category filter
         if category == 'surowce':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+            rows = [r for r in rows if r.get('is_surowce')]
         elif category == 'inserty':
             rows = [r for r in rows if r.get('is_insert')]
 
@@ -792,7 +793,7 @@ def api_matlot_bulk_release():
 
         # Same category filter as the list endpoint
         if category == 'surowce':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+            rows = [r for r in rows if r.get('is_surowce')]
         elif category == 'inserty':
             rows = [r for r in rows if r.get('is_insert')]
 
@@ -879,7 +880,7 @@ def api_matlot_bulk_status():
         rows = _get_tracking_rows()
 
         if category == 'surowce':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+            rows = [r for r in rows if r.get('is_surowce')]
         elif category == 'inserty':
             rows = [r for r in rows if r.get('is_insert')]
 
@@ -995,7 +996,7 @@ def api_matlot_bulk_uwagi():
         rows = _get_tracking_rows()
 
         if category == 'surowce':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+            rows = [r for r in rows if r.get('is_surowce')]
         elif category == 'inserty':
             rows = [r for r in rows if r.get('is_insert')]
 
@@ -1111,7 +1112,7 @@ def api_matlot_bulk_delete():
         rows = _get_tracking_rows()
 
         if category == 'surowce':
-            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+            rows = [r for r in rows if r.get('is_surowce')]
         elif category == 'inserty':
             rows = [r for r in rows if r.get('is_insert')]
 
