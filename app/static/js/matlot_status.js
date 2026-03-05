@@ -21,6 +21,10 @@ let hasMoreRecords = false;
 // Enhanced edit mode — toggled via the sidebar version button; persisted in localStorage
 let enhancedEdit = localStorage.getItem('matlot-enhanced-edit') === '1';
 
+// Bulk action mode — toggled via "Tryb zbiorczy" button; only active when enhancedEdit is on.
+// When active, the uwagi modal's Usuń and status switch operate on ALL filtered rows.
+let bulkMode = false;
+
 // Today's date in dd.mm.yyyy — used to detect new rows added on current day
 const _todayDmy = (() => {
     const d = new Date();
@@ -35,10 +39,26 @@ let _pendingBtn             = null;
 let _pendingReleaseStatus   = 'N';
 let _pendingOriginalStatus  = 'N';  // status when modal was opened (bulk mode baseline)
 
-/** True when enhanced-edit is on AND the bulk-release button is enabled. */
+/** True when enhanced-edit is on AND bulk action mode is explicitly enabled. */
 function isBulkMode() {
-    const btn = document.getElementById('btn-bulk-release');
-    return enhancedEdit && btn && !btn.disabled;
+    return enhancedEdit && bulkMode;
+}
+
+/** Toggle bulk action mode on/off. Only has effect when enhancedEdit is on. */
+function toggleBulkMode() {
+    if (!enhancedEdit) return;
+    bulkMode = !bulkMode;
+    _updateBulkModeButton();
+}
+
+function _updateBulkModeButton() {
+    const btn = document.getElementById('btn-bulk-mode');
+    if (!btn) return;
+    btn.style.display     = enhancedEdit ? '' : 'none';
+    btn.style.background  = bulkMode ? 'rgba(245,158,11,0.15)' : '';
+    btn.style.color       = bulkMode ? '#f59e0b' : '';
+    btn.style.borderColor = bulkMode ? '#f59e0b' : '';
+    btn.textContent       = bulkMode ? 'Tryb zbiorczy: WŁ' : 'Tryb zbiorczy';
 }
 
 // Initialize on page load — sync from MOSYS first, then display data
@@ -53,8 +73,15 @@ document.addEventListener('DOMContentLoaded', () => {
             enhancedEdit = !enhancedEdit;
             localStorage.setItem('matlot-enhanced-edit', enhancedEdit ? '1' : '0');
             toggleBtn.style.opacity = enhancedEdit ? '0.55' : '0.15';
+            if (!enhancedEdit) {
+                bulkMode = false;  // bulk mode off when enhanced edit is disabled
+            }
+            _updateBulkModeButton();
         });
     }
+
+    // Initialize bulk mode button visibility
+    _updateBulkModeButton();
 
     // Infinite scroll on table body
     const tbodyScroll = document.querySelector('.tbody-scroll');
@@ -774,21 +801,33 @@ async function submitUwagi() {
             return;
         }
 
-        // Step 2: bulk mode + status changed → apply status to all other filtered rows
-        // The single row already has the new status so it will be skipped by bulk-status.
-        if (isBulkMode() && statusChanged) {
+        // Step 2: bulk mode → apply all modal fields to every other filtered row.
+        // The single row is excluded via exclude_key (already saved above).
+        // release_status change is gated by original_status so only matching rows flip.
+        if (isBulkMode()) {
             const searchPayload = {};
             Object.entries(searchFilters).forEach(([key, val]) => {
                 if (val && val.trim()) searchPayload[key] = val.trim();
             });
-            await fetch('/api/matlot-status/bulk-status', {
+
+            // Build fields dict — always include text/withdrawal fields (empty = clear);
+            // skip prima_vista / released_at when input is empty (user left them blank).
+            const bulkFields = { uwagi };
+            if (primaVista)  bulkFields.prima_vista  = primaVista;
+            if (releasedAt)  bulkFields.released_at  = releasedAt;
+            bulkFields.withdrawn_at      = withdrawnAt;
+            bulkFields.withdrawal_reason = withdrawalReason;
+            if (statusChanged) bulkFields.release_status = _pendingReleaseStatus;
+
+            await fetch('/api/matlot-status/bulk-uwagi', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({
-                    original_status: _pendingOriginalStatus,
-                    new_status:      _pendingReleaseStatus,
                     category:        currentCategory,
                     search:          searchPayload,
+                    exclude_key:     { codice_materiale: codice, lotto, box },
+                    original_status: _pendingOriginalStatus,
+                    fields:          bulkFields,
                 }),
             });
         }

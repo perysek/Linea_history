@@ -896,6 +896,160 @@ def api_matlot_bulk_status():
     return jsonify({'success': True, 'updated_count': updated_count})
 
 
+# ── API: bulk uwagi (all fields) ──────────────────────────────────────────────
+
+_MISSING = object()  # sentinel — distinguishes absent JSON key from null/empty value
+
+
+@matlot_bp.route('/api/matlot-status/bulk-uwagi', methods=['POST'])
+def api_matlot_bulk_uwagi():
+    """Apply modal fields to all filtered rows except the already-saved exclude_key row.
+
+    Only fields explicitly present in the 'fields' dict are applied.
+    release_status change only applies to rows whose current status matches original_status.
+
+    Body JSON:
+        category        — 'surowce' | 'inserty' | ''
+        search          — dict of column filters
+        exclude_key     — {codice_materiale, lotto, box} row already saved via /uwagi
+        original_status — 'N' | 'S' | '' — status filter for release_status changes
+        fields:
+            uwagi             — str (apply to all; empty string clears)
+            prima_vista       — YYYY-MM-DD or absent (skip)
+            released_at       — YYYY-MM-DD or absent (skip)
+            release_status    — 'N' | 'S' or absent (skip)
+            withdrawn_at      — YYYY-MM-DD or '' (clear) or absent (skip)
+            withdrawal_reason — str or '' (clear) or absent (skip)
+
+    Returns:
+        { success, updated_count }
+    """
+    data            = request.get_json(silent=True) or {}
+    category        = str(data.get('category')        or '').strip().lower()
+    search          = data.get('search') or {}
+    exclude_key     = data.get('exclude_key') or {}
+    original_status = str(data.get('original_status') or '').strip().upper()
+    fields          = data.get('fields') or {}
+
+    # Extract each field — use _MISSING so absent key ≠ empty string
+    f_uwagi             = fields.get('uwagi',             _MISSING)
+    f_prima_vista       = fields.get('prima_vista',       _MISSING)
+    f_released_at       = fields.get('released_at',       _MISSING)
+    f_release_status    = fields.get('release_status',    _MISSING)
+    f_withdrawn_at      = fields.get('withdrawn_at',      _MISSING)
+    f_withdrawal_reason = fields.get('withdrawal_reason', _MISSING)
+
+    exclude_codice = str(exclude_key.get('codice_materiale') or '').strip()
+    exclude_lotto  = str(exclude_key.get('lotto')            or '').strip()
+    exclude_box    = str(exclude_key.get('box')              or '').strip() or '-'
+
+    def _parse_date(s):
+        y, m, d = str(s).split('-')
+        return date(int(y), int(m), int(d))
+
+    def _parse_dt(s):
+        y, m, d = str(s).split('-')
+        return datetime(int(y), int(m), int(d))
+
+    try:
+        rows = _get_tracking_rows()
+
+        if category == 'surowce':
+            rows = [r for r in rows if r['codice_materiale'].lower().startswith('t')]
+        elif category == 'inserty':
+            rows = [r for r in rows if r.get('is_insert')]
+
+        for col, val in search.items():
+            val = str(val or '').strip().lower()
+            if val:
+                key = VALID_SORT_FIELDS.get(col, col.lower())
+                rows = [r for r in rows if val in str(r.get(key) or '').lower()]
+
+        # Exclude the single row already saved via /uwagi
+        if exclude_codice and exclude_lotto:
+            rows = [r for r in rows if not (
+                r['codice_materiale'] == exclude_codice
+                and r['lotto'] == exclude_lotto
+                and r['box'] == exclude_box
+            )]
+
+        if not rows:
+            return jsonify({'success': True, 'updated_count': 0})
+
+        now = datetime.now()
+        updated_count = 0
+        status_changed_rows = []  # for MOSYS best-effort sync
+
+        for row in rows:
+            tracking = MatlotTracking.query.filter_by(
+                codice_materiale=row['codice_materiale'],
+                lotto=row['lotto'],
+                box=row['box'],
+            ).first()
+            if not tracking:
+                continue
+
+            if f_uwagi is not _MISSING:
+                tracking.uwagi = str(f_uwagi).strip() or None
+
+            if f_prima_vista is not _MISSING and f_prima_vista:
+                try:
+                    tracking.prima_vista = _parse_date(f_prima_vista)
+                except (ValueError, AttributeError):
+                    pass  # skip malformed date
+
+            if f_release_status is not _MISSING and f_release_status in ('N', 'S'):
+                # Only flip rows that currently have original_status (or if no filter given)
+                if not original_status or tracking.release_status == original_status:
+                    if tracking.release_status != f_release_status:
+                        old_st = tracking.release_status
+                        tracking.release_status = f_release_status
+                        if f_release_status == 'S':
+                            tracking.released_at = now
+                        else:
+                            tracking.released_at = None
+                        status_changed_rows.append((row['codice_materiale'], row['lotto'], f_release_status))
+
+            if f_released_at is not _MISSING and f_released_at:
+                try:
+                    tracking.released_at = _parse_dt(f_released_at)
+                except (ValueError, AttributeError):
+                    pass
+
+            if f_withdrawn_at is not _MISSING:
+                wa = str(f_withdrawn_at).strip() if f_withdrawn_at is not None else ''
+                tracking.withdrawn_at = None if wa == '' else _parse_dt(wa) if wa else None
+
+            if f_withdrawal_reason is not _MISSING:
+                wr = str(f_withdrawal_reason).strip() if f_withdrawal_reason is not None else ''
+                tracking.withdrawal_reason = wr or None
+
+            updated_count += 1
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"api_matlot_bulk_uwagi SQLite error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Best-effort MOSYS sync for status changes
+    if status_changed_rows:
+        try:
+            from MOSYS_data_functions import update_matlot_lotto_status
+            for codice, lotto, new_st in status_changed_rows:
+                try:
+                    update_matlot_lotto_status(codice, lotto, new_st)
+                except Exception as mosys_err:
+                    current_app.logger.warning(
+                        f"MOSYS bulk-uwagi status write failed for {codice}/{lotto}: {mosys_err}"
+                    )
+        except Exception:
+            pass
+
+    return jsonify({'success': True, 'updated_count': updated_count})
+
+
 # ── API: bulk delete ──────────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/bulk-delete', methods=['POST'])
