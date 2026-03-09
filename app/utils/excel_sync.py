@@ -56,6 +56,7 @@ def convert_to_boolean(value):
     return bool(value)
 
 
+# noinspection D
 def sync_new_excel_data(force=False):
     """
     Check for new rows in Excel and import them into the database.
@@ -254,6 +255,7 @@ def sync_new_excel_data(force=False):
                 data_niezgodnosci = mosys_info.get('data_niezgodnosci')
                 nr_zamowienia = mosys_info.get('nr_zamowienia')
                 kod_detalu = mosys_info.get('kod_detalu')
+                opis_niezgodnosci = mosys_info.get('opis_niezgodnosci', '')
 
                 # Create DaneRaportu record
                 raport = DaneRaportu(
@@ -263,6 +265,7 @@ def sync_new_excel_data(force=False):
                     data_niezgodnosci=data_niezgodnosci,  # From MOSYS
                     nr_zamowienia=nr_zamowienia,  # From MOSYS
                     kod_detalu=kod_detalu,  # From MOSYS
+                    opis_niezgodnosci=opis_niezgodnosci,  # From MOSYS
                     nr_instrukcji=NR_INSTRUKCJI,  # Fixed value
                     selekcja_na_biezaco=record['selekcja_na_biezaco'],
                     ilosc_detali_sprawdzonych=record['ilosc_detali_sprawdzonych'],

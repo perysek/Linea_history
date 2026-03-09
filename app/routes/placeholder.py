@@ -397,9 +397,11 @@ def dane_selekcji():
     # Get all results (no pagination limit for scrolling view)
     reports = query.all()
 
-    # Lazy load missing MOSYS data
+    # Lazy load missing MOSYS data (data_niezgodnosci OR opis_niezgodnosci absent)
     reports_needing_mosys = [r for r in reports
-                             if r.data_niezgodnosci is None and r.nr_niezgodnosci]
+                             if r.nr_niezgodnosci and (
+                                 r.data_niezgodnosci is None or not r.opis_niezgodnosci
+                             )]
 
     if reports_needing_mosys:
         try:
