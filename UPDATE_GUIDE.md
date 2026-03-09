@@ -183,43 +183,119 @@ If you see `WARNING: No admin user found!`, the table was already populated from
 
 ---
 
-## Step 8 — (Optional) Import data from Excel
+## Step 8 — (Optional) Copy dev database to production server
 
-Only run this when you need to import new sorting records from `PPM_wew.xlsm`.
-The script detects and skips duplicates — it is safe to re-run.
+Use this when you have been working on data locally (seeding test data, running
+`migrate_excel_data.py` on the dev machine, etc.) and want the production server
+to have the same records.
+
+The dev database lives at:
+```
+C:\Users\piotrperesiak\PycharmProjects\LINEA_60\linea.db   (dev machine)
+```
+
+The production database lives at:
+```
+C:\linea-production\linea.db                                (server STMP-POL-QMS)
+```
+
+> **Note:** `linea.db` is excluded from Git (in `.gitignore`), so it is never
+> pushed to GitHub. You must transfer it manually.
+
+---
+
+### Option A — Transfer via RDP (simplest)
+
+1. Open an **RDP session** to `STMP-POL-QMS` (10.52.10.101)
+2. In the RDP window, open the **Local Resources** tab → enable **Drives**
+   so your dev machine's drives appear inside the RDP session
+3. Inside the RDP session, open **File Explorer**
+4. Navigate to your dev machine drive (e.g. `\\tsclient\C\`)
+5. Copy the file:
+   ```
+   \\tsclient\C\Users\piotrperesiak\PycharmProjects\LINEA_60\linea.db
+   ```
+   → paste into:
+   ```
+   C:\linea-production\linea.db
+   ```
+   (confirm overwrite)
+
+---
+
+### Option B — PowerShell over the network (from dev machine)
+
+Run this on your **dev machine** (PowerShell as Administrator):
 
 ```powershell
+# Source: dev db
+$src = "C:\Users\piotrperesiak\PycharmProjects\LINEA_60\linea.db"
+
+# Destination: production server via UNC path
+# Replace with the actual admin share path for STMP-POL-QMS:
+$dst = "\\10.52.10.101\c$\linea-production\linea.db"
+
+# Backup current production db first (on the server):
+$date = Get-Date -Format "yyyyMMdd_HHmm"
+Copy-Item $dst "\\10.52.10.101\c$\linea-backups\linea_before_devpush_$date.db"
+
+# Copy dev db → production:
+Copy-Item $src $dst -Force
+
+Write-Host "Done. Production db replaced with dev db."
+```
+
+> Requires that `C$` admin share is accessible from your dev machine, and that
+> you have admin credentials for `STMP-POL-QMS`.
+
+---
+
+### Option C — PowerShell Remoting (most reliable for automation)
+
+Run this on your **dev machine**:
+
+```powershell
+$serverIP  = "10.52.10.101"
+$localDb   = "C:\Users\piotrperesiak\PycharmProjects\LINEA_60\linea.db"
+$remoteDir = "C:\linea-production"
+$backupDir = "C:\linea-backups"
+
+# Open a PS session to the server
+$session = New-PSSession -ComputerName $serverIP -Credential (Get-Credential)
+
+# 1. Backup current db on the server
+$date = Get-Date -Format "yyyyMMdd_HHmm"
+Invoke-Command -Session $session -ScriptBlock {
+    param($src, $dst, $d)
+    Copy-Item $src "$dst\linea_before_devpush_$d.db"
+} -ArgumentList "$remoteDir\linea.db", $backupDir, $date
+
+# 2. Push the dev db to the server
+Copy-Item -Path $localDb -Destination "$remoteDir\linea.db" -ToSession $session -Force
+
+# 3. Close session
+Remove-PSSession $session
+
+Write-Host "Dev db transferred to $serverIP"
+```
+
+---
+
+### After any of the above options — run migrations on the server
+
+The copied dev db may be behind if the server was not updated yet.
+Always run migrations after replacing the db:
+
+```powershell
+# On the server (PowerShell as Admin):
 cd C:\linea-production
 .\venv\Scripts\Activate.ps1
-
-# Dry-run first (no changes, just shows what would be imported):
-python migrate_excel_data.py --dry-run --from-date=2026-01-01
-
-# If the preview looks correct, run for real:
-python migrate_excel_data.py --from-date=2026-01-01
+$env:FLASK_APP    = "run.py"
+$env:FLASK_CONFIG = "production"
+flask db upgrade
 ```
 
-### Common options
-
-| Flag | Purpose |
-|------|---------|
-| `--dry-run` | Preview without writing to db |
-| `--quiet` | Suppress per-row output (faster) |
-| `--from-date=YYYY-MM-DD` | Only import rows on/after this date |
-| `--start-row=N` | Start from row N in the Excel file (resume interrupted import) |
-
-### Excel file location
-
-The app defaults to:
-```
-G:\DOCUMENT\qualita\Sistema Zarządzania Jakością\Cele jakościowe\PPM wewnętrzny koszty złej jakości (2023).xlsm
-```
-
-Override via environment variable if the path differs on the server:
-```powershell
-$env:EXCEL_FILE_PATH = "\\SERVER\share\PPM_wew.xlsm"
-python migrate_excel_data.py --from-date=2026-01-01
-```
+This is safe to run even if the db is already up to date (`No upgrade required`).
 
 ---
 
@@ -265,8 +341,8 @@ The RBAC system was added in commit `afec4ad`. On the first startup after this u
 [ ] 2. Backup database  (Copy-Item linea.db -> linea-backups\)
 [ ] 3. git pull origin main
 [ ] 4. pip install -r requirements.txt  (if requirements.txt changed)
-[ ] 5. flask db upgrade
-[ ] 6. python migrate_excel_data.py  (if new Excel data to import)
+[ ] 5. Copy dev linea.db to server  (if pushing local data — see Step 8)
+[ ] 6. flask db upgrade
 [ ] 7. Start-Service LINEA-App
 [ ] 8. Verify: Get-Service LINEA-App  (Running)
 [ ] 9. Verify: browser opens login page
@@ -276,59 +352,67 @@ The RBAC system was added in commit `afec4ad`. On the first startup after this u
 
 ## Quick copy-paste update script
 
-Save this as `update.ps1` in `C:\linea-production\` for one-click updates:
+Save this as `update.ps1` in `C:\linea-production\` for one-click updates.
+Run it **on the server** (PowerShell as Administrator):
 
 ```powershell
 # update.ps1 — LINEA update script
 # Run as Administrator from C:\linea-production
 
 param(
-    [switch]$SkipDataImport,
-    [string]$FromDate = ""
+    # Path to dev linea.db on the dev machine (via UNC or mapped drive).
+    # Leave empty to skip db copy and keep the existing production db.
+    [string]$DevDb = ""
 )
 
 $ErrorActionPreference = "Stop"
-$AppDir = "C:\linea-production"
+$AppDir    = "C:\linea-production"
 $BackupDir = "C:\linea-backups"
 
 Write-Host "=== LINEA Update Script ===" -ForegroundColor Cyan
 
 # 1. Stop service
-Write-Host "`n[1/7] Stopping LINEA-App service..." -ForegroundColor Yellow
+Write-Host "`n[1/6] Stopping LINEA-App service..." -ForegroundColor Yellow
 Stop-Service LINEA-App -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
-# 2. Backup database
-Write-Host "[2/7] Backing up database..." -ForegroundColor Yellow
+# 2. Backup current database
+Write-Host "[2/6] Backing up database..." -ForegroundColor Yellow
 $date = Get-Date -Format "yyyyMMdd_HHmm"
 Copy-Item "$AppDir\linea.db" "$BackupDir\linea_$date.db"
 Write-Host "      Backup: $BackupDir\linea_$date.db" -ForegroundColor Green
 
-# 3. Pull code
-Write-Host "[3/7] Pulling latest code from GitHub..." -ForegroundColor Yellow
+# 3. Pull latest code from GitHub
+Write-Host "[3/6] Pulling latest code from GitHub..." -ForegroundColor Yellow
 Set-Location $AppDir
 git pull origin main
 
-# 4. Install dependencies
-Write-Host "[4/7] Installing dependencies..." -ForegroundColor Yellow
+# 4. Install/update dependencies
+Write-Host "[4/6] Installing dependencies..." -ForegroundColor Yellow
 & "$AppDir\venv\Scripts\pip.exe" install -r "$AppDir\requirements.txt" --quiet
 
-# 5. Run migrations
-Write-Host "[5/7] Running database migrations..." -ForegroundColor Yellow
+# 5. Copy dev db if provided
+if ($DevDb -ne "") {
+    if (Test-Path $DevDb) {
+        Write-Host "[5/6] Copying dev database from: $DevDb" -ForegroundColor Yellow
+        Copy-Item $DevDb "$AppDir\linea.db" -Force
+        Write-Host "      Dev db copied." -ForegroundColor Green
+    } else {
+        Write-Host "[5/6] WARNING: DevDb path not found: $DevDb" -ForegroundColor Red
+        Write-Host "      Keeping existing production database." -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "[5/6] No DevDb specified — keeping existing production database." -ForegroundColor DarkGray
+}
+
+# 6. Run schema migrations (safe even if db is already up to date)
+Write-Host "[6/6] Running database migrations..." -ForegroundColor Yellow
 $env:FLASK_APP    = "run.py"
 $env:FLASK_CONFIG = "production"
 & "$AppDir\venv\Scripts\flask.exe" db upgrade
 
-# 6. Optional data import
-if (-not $SkipDataImport -and $FromDate -ne "") {
-    Write-Host "[6/7] Importing Excel data from $FromDate..." -ForegroundColor Yellow
-    & "$AppDir\venv\Scripts\python.exe" "$AppDir\migrate_excel_data.py" --from-date=$FromDate --quiet
-} else {
-    Write-Host "[6/7] Skipping Excel data import." -ForegroundColor DarkGray
-}
-
-# 7. Start service
-Write-Host "[7/7] Starting LINEA-App service..." -ForegroundColor Yellow
+# Start service
+Write-Host "`nStarting LINEA-App service..." -ForegroundColor Yellow
 Start-Service LINEA-App
 Start-Sleep -Seconds 3
 $status = (Get-Service LINEA-App).Status
@@ -336,12 +420,17 @@ Write-Host "`n=== Done. Service status: $status ===" -ForegroundColor Cyan
 ```
 
 **Usage:**
-```powershell
-# Code + migrations only (no Excel import):
-.\update.ps1 -SkipDataImport
 
-# Code + migrations + import Excel records from 2026-01-01:
-.\update.ps1 -FromDate "2026-01-01"
+```powershell
+# Code + migrations only (keep existing production data):
+.\update.ps1
+
+# Code + replace production db with dev db (via RDP drive mapping):
+# (\\tsclient\C\ is your dev machine's C: drive inside the RDP session)
+.\update.ps1 -DevDb "\\tsclient\C\Users\piotrperesiak\PycharmProjects\LINEA_60\linea.db"
+
+# Code + replace production db with dev db (via network share):
+.\update.ps1 -DevDb "\\10.52.10.xxx\c$\Users\piotrperesiak\PycharmProjects\LINEA_60\linea.db"
 ```
 
 ---
