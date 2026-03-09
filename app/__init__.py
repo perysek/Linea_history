@@ -11,6 +11,29 @@ migrate = Migrate()
 login_manager = LoginManager()
 
 
+def _first_accessible_url() -> str:
+    """Return the URL of the first module the current user can access.
+
+    Priority matches the sidebar order. Falls back to the login page if the
+    user somehow has no module permissions at all.
+    """
+    from flask_login import current_user
+    from flask import url_for
+
+    # (module_key, endpoint)  — first entry per sidebar section
+    _PRIORITY = [
+        ('glowne',      'placeholder.wykaz_zablokowanych'),
+        ('analiza',     'placeholder.analiza_danych'),
+        ('magazyn',     'matlot.matlot_status'),
+        ('zarzadzanie', 'placeholder.utrzymanie_form'),
+        ('admin',       'auth.admin_users'),
+    ]
+    for module_key, endpoint in _PRIORITY:
+        if current_user.has_module_access(module_key):
+            return url_for(endpoint)
+    return url_for('auth.logout')  # no permissions at all — force re-login
+
+
 def create_app(config_name='default'):
     """Create and configure Flask application."""
     app = Flask(__name__)
@@ -97,7 +120,7 @@ def create_app(config_name='default'):
     @app.route('/')
     @login_required
     def index():
-        return redirect(url_for('linea.index'))
+        return redirect(_first_accessible_url())
 
     # Seed admin user on first run
     with app.app_context():
