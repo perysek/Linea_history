@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 
 from app import db
 from app.models.matlot import MatlotTracking
+from app.utils.auth_helpers import module_required, matlot_write_required
 
 matlot_bp = Blueprint('matlot', __name__)
 
@@ -326,9 +327,12 @@ def _get_tracking_rows():
 # ── page route ────────────────────────────────────────────────────────────────
 
 @matlot_bp.route('/matlot-status')
+@module_required('magazyn')
 def matlot_status():
     """Raw material incoming inspection — MATLOT certificate monitoring view."""
-    return render_template('matlot/matlot_status.html')
+    from flask_login import current_user
+    matlot_readonly = current_user.matlot_readonly if current_user.is_authenticated else True
+    return render_template('matlot/matlot_status.html', matlot_readonly=matlot_readonly)
 
 
 # ── API: refresh (MOSYS sync) ─────────────────────────────────────────────────
@@ -336,6 +340,7 @@ def matlot_status():
 _MOSYS_SYNC_TIMEOUT = 15  # seconds before giving up on MOSYS connection
 
 @matlot_bp.route('/api/matlot-refresh', methods=['POST'])
+@module_required('magazyn')
 def api_matlot_refresh():
     """Sync MOSYS → matlot_tracking. Called on page load and Refresh button.
 
@@ -385,6 +390,7 @@ def api_matlot_refresh():
 # ── API: list ─────────────────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status')
+@module_required('magazyn')
 def api_matlot_status():
     """Return matlot_tracking rows (SQLite only — no MOSYS call)."""
     sort_field    = request.args.get('sort', 'CODICE_MATERIALE')
@@ -501,6 +507,7 @@ def api_matlot_status():
 # ── API: release (N → S) ──────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/release', methods=['POST'])
+@matlot_write_required
 def api_matlot_release():
     """Release a batch: update SQLite (primary) then MOSYS (best-effort).
 
@@ -556,6 +563,7 @@ def api_matlot_release():
 # ── API: withdraw (S → N) — TASK0 ─────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/withdraw', methods=['POST'])
+@matlot_write_required
 def api_matlot_withdraw():
     """Withdraw a released batch: revert release_status S → N.
 
@@ -615,6 +623,7 @@ def api_matlot_withdraw():
 # ── API: edit uwagi — TASK4 ───────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/uwagi', methods=['POST'])
+@matlot_write_required
 def api_matlot_uwagi():
     """Update editable fields for a tracking row.
 
@@ -730,6 +739,7 @@ def api_matlot_uwagi():
 # ── API: delete row ───────────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/delete', methods=['POST'])
+@matlot_write_required
 def api_matlot_delete():
     """Delete a tracking row from SQLite. No MOSYS update.
 
@@ -765,6 +775,7 @@ def api_matlot_delete():
 # ── API: bulk release ─────────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/bulk-release', methods=['POST'])
+@matlot_write_required
 def api_matlot_bulk_release():
     """Release all pending rows that match the client's current search filters.
 
@@ -849,6 +860,7 @@ def api_matlot_bulk_release():
 # ── API: bulk status change ───────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/bulk-status', methods=['POST'])
+@matlot_write_required
 def api_matlot_bulk_status():
     """Change release_status for all filtered rows whose current status matches original_status.
 
@@ -943,6 +955,7 @@ _MISSING = object()  # sentinel — distinguishes absent JSON key from null/empt
 
 
 @matlot_bp.route('/api/matlot-status/bulk-uwagi', methods=['POST'])
+@matlot_write_required
 def api_matlot_bulk_uwagi():
     """Apply modal fields to all filtered rows except the already-saved exclude_key row.
 
@@ -1094,6 +1107,7 @@ def api_matlot_bulk_uwagi():
 # ── API: bulk delete ──────────────────────────────────────────────────────────
 
 @matlot_bp.route('/api/matlot-status/bulk-delete', methods=['POST'])
+@matlot_write_required
 def api_matlot_bulk_delete():
     """Delete all rows that match the current category + search filters.
 

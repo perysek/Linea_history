@@ -1,0 +1,260 @@
+{% extends 'base.html' %}
+
+{% block title %}Role i uprawnienia — LINEA{% endblock %}
+
+{% block extra_css %}
+<style>
+    .admin-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
+    .admin-header h1 { font-size:1.25rem; font-weight:700; color:#1e293b; }
+    .btn { display:inline-flex; align-items:center; gap:0.375rem; padding:0.5rem 1rem; border-radius:6px; font-size:0.875rem; font-weight:500; cursor:pointer; border:1px solid transparent; font-family:inherit; text-decoration:none; transition:opacity 0.15s; }
+    .btn:hover { opacity:0.85; }
+    .btn-primary { background:#3b82f6; color:white; }
+    .btn-secondary { background:white; color:#374151; border-color:#d1d5db; }
+    .btn-danger { background:#ef4444; color:white; }
+    .btn-sm { padding:0.3rem 0.625rem; font-size:0.8125rem; }
+
+    .flash-messages { margin-bottom:1rem; }
+    .alert { padding:0.625rem 1rem; border-radius:6px; font-size:0.875rem; margin-bottom:0.5rem; }
+    .alert-error { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+    .alert-success { background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+
+    .admin-table { width:100%; border-collapse:collapse; font-size:0.875rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+    .admin-table th { background:#f8fafc; padding:0.625rem 0.875rem; text-align:left; font-weight:600; color:#475569; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; border-bottom:1px solid #e2e8f0; }
+    .admin-table td { padding:0.625rem 0.875rem; border-bottom:1px solid #f1f5f9; color:#334155; vertical-align:middle; }
+    .admin-table tr:last-child td { border-bottom:none; }
+    .admin-table tr:hover td { background:#f8fafc; }
+
+    .perm-check { color:#16a34a; font-size:1rem; }
+    .perm-x { color:#d1d5db; font-size:1rem; }
+
+    .actions { display:flex; gap:0.375rem; }
+    .badge-super { display:inline-block; padding:0.2rem 0.5rem; border-radius:999px; font-size:0.6875rem; font-weight:600; background:#fef3c7; color:#92400e; }
+
+    dialog { border:none; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,0.2); padding:0; width:520px; max-width:95vw; }
+    dialog::backdrop { background:rgba(0,0,0,0.4); }
+    .dialog-header { padding:1.25rem 1.5rem 0; font-size:1rem; font-weight:600; color:#1e293b; }
+    .dialog-body { padding:1rem 1.5rem; }
+    .dialog-footer { padding:0 1.5rem 1.25rem; display:flex; justify-content:flex-end; gap:0.5rem; }
+
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; font-size:0.8125rem; font-weight:500; color:#374151; margin-bottom:0.3rem; }
+    .form-group input[type="text"] { width:100%; padding:0.5rem 0.75rem; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; font-family:inherit; outline:none; }
+    .form-group input[type="text"]:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.12); }
+
+    .perm-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+    .perm-item { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.625rem; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; }
+    .perm-item input[type="checkbox"] { width:1rem; height:1rem; cursor:pointer; }
+    .perm-item label { font-size:0.8125rem; font-weight:500; cursor:pointer; color:#374151; margin:0; }
+    .perm-section-title { font-size:0.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.5rem; margin-top:0.75rem; }
+
+    .perm-item.perm-special { border-color:#fde68a; background:#fffbeb; }
+    .perm-item.perm-super { border-color:#fca5a5; background:#fff1f2; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="height:100%; overflow-y:auto; padding:0.5rem 0;">
+
+    {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+    <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <div class="admin-header">
+        <h1>Role i uprawnienia</h1>
+        <button class="btn btn-primary" onclick="document.getElementById('dlg-create-role').showModal()">
+            + Nowa rola
+        </button>
+    </div>
+
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Nazwa</th>
+                <th>Opis</th>
+                <th title="Główne">Gł.</th>
+                <th title="Analiza">An.</th>
+                <th title="Magazyn">Mag.</th>
+                <th title="Zarządzanie">Zarz.</th>
+                <th title="Administracja">Adm.</th>
+                <th title="MATLOT tylko odczyt">M-RO</th>
+                <th>Użytkownicy</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for role in roles %}
+            <tr>
+                <td>
+                    <strong>{{ role.name }}</strong>
+                    {% if role.is_superadmin %}<span class="badge-super" style="margin-left:0.375rem;">Superadmin</span>{% endif %}
+                </td>
+                <td style="color:#64748b;">{{ role.description or '—' }}</td>
+                <td><span class="{{ 'perm-check' if role.can_glowne or role.is_superadmin else 'perm-x' }}">{{ '✓' if role.can_glowne or role.is_superadmin else '·' }}</span></td>
+                <td><span class="{{ 'perm-check' if role.can_analiza or role.is_superadmin else 'perm-x' }}">{{ '✓' if role.can_analiza or role.is_superadmin else '·' }}</span></td>
+                <td><span class="{{ 'perm-check' if role.can_magazyn or role.is_superadmin else 'perm-x' }}">{{ '✓' if role.can_magazyn or role.is_superadmin else '·' }}</span></td>
+                <td><span class="{{ 'perm-check' if role.can_zarzadzanie or role.is_superadmin else 'perm-x' }}">{{ '✓' if role.can_zarzadzanie or role.is_superadmin else '·' }}</span></td>
+                <td><span class="{{ 'perm-check' if role.can_admin or role.is_superadmin else 'perm-x' }}">{{ '✓' if role.can_admin or role.is_superadmin else '·' }}</span></td>
+                <td><span class="{{ 'perm-check' if role.matlot_readonly else 'perm-x' }}">{{ '✓' if role.matlot_readonly else '·' }}</span></td>
+                <td>{{ role.users.count() }}</td>
+                <td>
+                    <div class="actions">
+                        <button class="btn btn-secondary btn-sm"
+                                data-role-id='{{ role.id }}'
+                                data-role='{{ {"name": role.name, "description": role.description or "", "can_glowne": role.can_glowne, "can_analiza": role.can_analiza, "can_magazyn": role.can_magazyn, "can_zarzadzanie": role.can_zarzadzanie, "can_admin": role.can_admin, "matlot_readonly": role.matlot_readonly, "is_superadmin": role.is_superadmin}|tojson }}'
+                                onclick="openEditRoleBtn(this)">
+                            Edytuj
+                        </button>
+                        {% if role.users.count() == 0 %}
+                        <form method="POST" action="{{ url_for('auth.admin_delete_role', role_id=role.id) }}"
+                              onsubmit="return confirm('Usunąć rolę {{ role.name }}?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Usuń</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:2rem;">Brak ról</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top:1rem;">
+        <a href="{{ url_for('auth.admin_users') }}" class="btn btn-secondary">← Użytkownicy</a>
+    </div>
+</div>
+
+<!-- Create Role Dialog -->
+<dialog id="dlg-create-role">
+    <div class="dialog-header">Nowa rola</div>
+    <form method="POST" action="{{ url_for('auth.admin_create_role') }}">
+        <div class="dialog-body">
+            <div class="form-group">
+                <label>Nazwa roli *</label>
+                <input type="text" name="name" required>
+            </div>
+            <div class="form-group">
+                <label>Opis</label>
+                <input type="text" name="description">
+            </div>
+            <div class="perm-section-title">Dostęp do modułów</div>
+            <div class="perm-grid">
+                <label class="perm-item">
+                    <input type="checkbox" name="can_glowne">
+                    <span>Główne</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_analiza">
+                    <span>Analiza</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_magazyn">
+                    <span>Magazyn</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_zarzadzanie">
+                    <span>Zarządzanie</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_admin">
+                    <span>Administracja</span>
+                </label>
+            </div>
+            <div class="perm-section-title">Specjalne</div>
+            <div class="perm-grid">
+                <label class="perm-item perm-special">
+                    <input type="checkbox" name="matlot_readonly">
+                    <span>MATLOT tylko odczyt</span>
+                </label>
+                <label class="perm-item perm-super">
+                    <input type="checkbox" name="is_superadmin">
+                    <span>Superadmin (pełny dostęp)</span>
+                </label>
+            </div>
+        </div>
+        <div class="dialog-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Anuluj</button>
+            <button type="submit" class="btn btn-primary">Utwórz</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Edit Role Dialog -->
+<dialog id="dlg-edit-role">
+    <div class="dialog-header">Edytuj rolę</div>
+    <form method="POST" id="form-edit-role">
+        <div class="dialog-body">
+            <div class="form-group">
+                <label>Nazwa roli *</label>
+                <input type="text" name="name" id="edit-role-name" required>
+            </div>
+            <div class="form-group">
+                <label>Opis</label>
+                <input type="text" name="description" id="edit-role-desc">
+            </div>
+            <div class="perm-section-title">Dostęp do modułów</div>
+            <div class="perm-grid">
+                <label class="perm-item">
+                    <input type="checkbox" name="can_glowne" id="edit-can-glowne">
+                    <span>Główne</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_analiza" id="edit-can-analiza">
+                    <span>Analiza</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_magazyn" id="edit-can-magazyn">
+                    <span>Magazyn</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_zarzadzanie" id="edit-can-zarzadzanie">
+                    <span>Zarządzanie</span>
+                </label>
+                <label class="perm-item">
+                    <input type="checkbox" name="can_admin" id="edit-can-admin">
+                    <span>Administracja</span>
+                </label>
+            </div>
+            <div class="perm-section-title">Specjalne</div>
+            <div class="perm-grid">
+                <label class="perm-item perm-special">
+                    <input type="checkbox" name="matlot_readonly" id="edit-matlot-readonly">
+                    <span>MATLOT tylko odczyt</span>
+                </label>
+                <label class="perm-item perm-super">
+                    <input type="checkbox" name="is_superadmin" id="edit-is-superadmin">
+                    <span>Superadmin (pełny dostęp)</span>
+                </label>
+            </div>
+        </div>
+        <div class="dialog-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Anuluj</button>
+            <button type="submit" class="btn btn-primary">Zapisz</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+function openEditRoleBtn(btn) {
+    const id = btn.dataset.roleId;
+    const role = JSON.parse(btn.dataset.role);
+    document.getElementById('edit-role-name').value = role.name;
+    document.getElementById('edit-role-desc').value = role.description || '';
+    document.getElementById('edit-can-glowne').checked = role.can_glowne;
+    document.getElementById('edit-can-analiza').checked = role.can_analiza;
+    document.getElementById('edit-can-magazyn').checked = role.can_magazyn;
+    document.getElementById('edit-can-zarzadzanie').checked = role.can_zarzadzanie;
+    document.getElementById('edit-can-admin').checked = role.can_admin;
+    document.getElementById('edit-matlot-readonly').checked = role.matlot_readonly;
+    document.getElementById('edit-is-superadmin').checked = role.is_superadmin;
+    document.getElementById('form-edit-role').action = '/auth/admin/roles/' + id + '/edit';
+    document.getElementById('dlg-edit-role').showModal();
+}
+</script>
+{% endblock %}

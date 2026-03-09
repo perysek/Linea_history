@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+
+{% block title %}Zarządzanie użytkownikami — LINEA{% endblock %}
+
+{% block extra_css %}
+<style>
+    .admin-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.25rem;
+    }
+    .admin-header h1 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid transparent;
+        font-family: inherit;
+        text-decoration: none;
+        transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-secondary { background: white; color: #374151; border-color: #d1d5db; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-sm { padding: 0.3rem 0.625rem; font-size: 0.8125rem; }
+
+    .flash-messages { margin-bottom: 1rem; }
+    .alert { padding: 0.625rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+    .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+
+    .admin-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .admin-table th { background: #f8fafc; padding: 0.625rem 0.875rem; text-align: left; font-weight: 600; color: #475569; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e2e8f0; }
+    .admin-table td { padding: 0.625rem 0.875rem; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: #f8fafc; }
+
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 999px; font-size: 0.6875rem; font-weight: 600; }
+    .badge-active { background: #dcfce7; color: #15803d; }
+    .badge-inactive { background: #fee2e2; color: #b91c1c; }
+
+    .actions { display: flex; gap: 0.375rem; }
+
+    dialog {
+        border: none;
+        border-radius: 10px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        padding: 0;
+        width: 480px;
+        max-width: 95vw;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.4); }
+    .dialog-header {
+        padding: 1.25rem 1.5rem 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    .dialog-body { padding: 1rem 1.5rem; }
+    .dialog-footer { padding: 0 1.5rem 1.25rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: 0.8125rem; font-weight: 500; color: #374151; margin-bottom: 0.3rem; }
+    .form-group input, .form-group select {
+        width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db;
+        border-radius: 6px; font-size: 0.875rem; font-family: inherit;
+        outline: none; transition: border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="height:100%; overflow-y:auto; padding:0.5rem 0;">
+
+    {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+    <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <div class="admin-header">
+        <h1>Użytkownicy</h1>
+        <button class="btn btn-primary" onclick="document.getElementById('dlg-create-user').showModal()">
+            + Dodaj użytkownika
+        </button>
+    </div>
+
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Nazwa użytkownika</th>
+                <th>Imię i nazwisko</th>
+                <th>Rola</th>
+                <th>Status</th>
+                <th>Ostatnie logowanie</th>
+                <th>Akcje</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td><strong>{{ user.username }}</strong></td>
+                <td>{{ user.display_name or '—' }}</td>
+                <td>{{ user.role.name if user.role else '—' }}</td>
+                <td>
+                    <span class="badge {% if user.is_active %}badge-active{% else %}badge-inactive{% endif %}">
+                        {{ 'Aktywny' if user.is_active else 'Nieaktywny' }}
+                    </span>
+                </td>
+                <td>{{ user.last_login.strftime('%d.%m.%Y %H:%M') if user.last_login else '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <button class="btn btn-secondary btn-sm"
+                                data-user-id='{{ user.id }}'
+                                data-user='{{ {"username": user.username, "display_name": user.display_name or "", "role_id": user.role_id, "is_active": user.is_active}|tojson }}'
+                                onclick="openEditUserBtn(this)">
+                            Edytuj
+                        </button>
+                        {% if user.id != current_user.id %}
+                        <form method="POST" action="{{ url_for('auth.admin_delete_user', user_id=user.id) }}"
+                              onsubmit="return confirm('Usunąć użytkownika {{ user.username }}?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Usuń</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:2rem;">Brak użytkowników</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top:1rem;">
+        <a href="{{ url_for('auth.admin_roles') }}" class="btn btn-secondary">Role i uprawnienia →</a>
+    </div>
+</div>
+
+<!-- Create User Dialog -->
+<dialog id="dlg-create-user">
+    <div class="dialog-header">Nowy użytkownik</div>
+    <form method="POST" action="{{ url_for('auth.admin_create_user') }}">
+        <div class="dialog-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nazwa użytkownika *</label>
+                    <input type="text" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>Imię i nazwisko</label>
+                    <input type="text" name="display_name">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Hasło *</label>
+                <input type="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label>Rola *</label>
+                <select name="role_id" required>
+                    <option value="">— wybierz rolę —</option>
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="dialog-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Anuluj</button>
+            <button type="submit" class="btn btn-primary">Utwórz</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Edit User Dialog -->
+<dialog id="dlg-edit-user">
+    <div class="dialog-header">Edytuj użytkownika</div>
+    <form method="POST" id="form-edit-user">
+        <div class="dialog-body">
+            <div class="form-group">
+                <label>Nazwa użytkownika</label>
+                <input type="text" id="edit-username" disabled style="background:#f1f5f9;color:#64748b;">
+            </div>
+            <div class="form-group">
+                <label>Imię i nazwisko</label>
+                <input type="text" name="display_name" id="edit-display-name">
+            </div>
+            <div class="form-group">
+                <label>Rola</label>
+                <select name="role_id" id="edit-role">
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Status konta</label>
+                <select name="is_active" id="edit-active">
+                    <option value="1">Aktywny</option>
+                    <option value="0">Nieaktywny</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Nowe hasło (zostaw puste, aby nie zmieniać)</label>
+                <input type="password" name="password">
+            </div>
+        </div>
+        <div class="dialog-footer">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Anuluj</button>
+            <button type="submit" class="btn btn-primary">Zapisz</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+function openEditUserBtn(btn) {
+    const id = btn.dataset.userId;
+    const user = JSON.parse(btn.dataset.user);
+    document.getElementById('edit-username').value = user.username;
+    document.getElementById('edit-display-name').value = user.display_name || '';
+    document.getElementById('edit-role').value = user.role_id;
+    document.getElementById('edit-active').value = user.is_active ? '1' : '0';
+    document.getElementById('form-edit-user').action = '/auth/admin/users/' + id + '/edit';
+    document.getElementById('dlg-edit-user').showModal();
+}
+</script>
+{% endblock %}

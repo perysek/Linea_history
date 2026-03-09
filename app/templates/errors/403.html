@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Brak dostępu — LINEA{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+            height:100%; text-align:center; color:#1e293b;">
+    <div style="font-size:4rem; margin-bottom:1rem; opacity:0.3;">🔒</div>
+    <h1 style="font-size:1.5rem; font-weight:700; margin-bottom:0.5rem;">Brak dostępu</h1>
+    <p style="color:#64748b; margin-bottom:2rem; font-size:0.9375rem;">
+        Nie masz uprawnień do wyświetlenia tej strony.<br>
+        Skontaktuj się z administratorem, aby uzyskać dostęp.
+    </p>
+    <a href="{{ url_for('index') }}"
+       style="padding:0.625rem 1.5rem; background:#3b82f6; color:white; border-radius:6px;
+              text-decoration:none; font-weight:500; font-size:0.9375rem;">
+        Wróć do strony głównej
+    </a>
+</div>
+{% endblock %}

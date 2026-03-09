@@ -63,6 +63,21 @@ function _updateBulkModeButton() {
 
 // Initialize on page load — sync from MOSYS first, then display data
 document.addEventListener('DOMContentLoaded', () => {
+    // Read-only mode: disable write UI entirely
+    if (typeof MATLOT_READONLY !== 'undefined' && MATLOT_READONLY) {
+        enhancedEdit = false;
+        bulkMode = false;
+        localStorage.setItem('matlot-enhanced-edit', '0');
+
+        // Hide bulk action and enhanced-edit controls
+        const bulkBtn = document.getElementById('btn-bulk-mode');
+        if (bulkBtn) bulkBtn.style.display = 'none';
+        const bulkReleaseBtn = document.getElementById('btn-bulk-release');
+        if (bulkReleaseBtn) bulkReleaseBtn.style.display = 'none';
+        const toggleBtn2 = document.getElementById('toggle-enhanced-edit');
+        if (toggleBtn2) toggleBtn2.style.display = 'none';
+    }
+
     syncFromMosys().then(() => fetchRecords());
 
     // Wire enhanced-edit toggle button (sidebar footer, next to v1.0.0)
@@ -70,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (toggleBtn) {
         toggleBtn.style.opacity = enhancedEdit ? '0.55' : '0.15';
         toggleBtn.addEventListener('click', () => {
+            if (typeof MATLOT_READONLY !== 'undefined' && MATLOT_READONLY) return;
             enhancedEdit = !enhancedEdit;
             localStorage.setItem('matlot-enhanced-edit', enhancedEdit ? '1' : '0');
             toggleBtn.style.opacity = enhancedEdit ? '0.55' : '0.15';
@@ -406,8 +422,8 @@ function buildRowHtml(record) {
             </td>
             <td style="text-align: center;">
                 <div style="display: inline-flex; align-items: left; gap: 0.15rem;">
-                    ${primaryAction}
-                    ${editUwagiBtn}
+                    ${(typeof MATLOT_READONLY !== 'undefined' && MATLOT_READONLY) ? '' : primaryAction}
+                    ${(typeof MATLOT_READONLY !== 'undefined' && MATLOT_READONLY) ? '' : editUwagiBtn}
                 </div>
             </td>
         </tr>`;
@@ -529,7 +545,8 @@ function updateWithdrawnPill(withdrawnCount) {
 // ── Release modal (N → S) ─────────────────────────────────────────────────────
 
 /**
- * Open the release confirmation modal for a given batch.
+ * Open the release confirmation modal foclaude
+ r a given batch.
  * box parameter added for TASK3 (unique key now includes box).
  */
 function openReleaseModal(btn, codice, lotto, box) {

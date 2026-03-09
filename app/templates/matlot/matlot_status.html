@@ -768,5 +768,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>const MATLOT_READONLY = {{ 'true' if matlot_readonly else 'false' }};</script>
 <script src="{{ url_for('static', filename='js/matlot_status.js') }}"></script>
 {% endblock %}

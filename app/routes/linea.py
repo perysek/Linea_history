@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from flask import Blueprint, render_template, request, jsonify
 from app.database import execute_query, mosys_to_date, mosys_godz, get_stampi_riparaz
 from MOSYS_data_functions import get_blocked_parts_qty
+from app.utils.auth_helpers import module_required
 
 linea_bp = Blueprint('linea', __name__, url_prefix='/linea')
 
@@ -165,6 +166,7 @@ def get_linea_records(start_date, end_date, search_filters=None, sort_field='DAT
 
 
 @linea_bp.route('/')
+@module_required('glowne')
 def index():
     """Main LINEA table view."""
     # Get filter parameters
@@ -204,6 +206,7 @@ def index():
 
 
 @linea_bp.route('/api/search')
+@module_required('glowne')
 def search_records():
     """AJAX endpoint for searching and filtering records with pagination."""
     # Get date range parameters
@@ -267,6 +270,7 @@ def search_records():
 
 
 @linea_bp.route('/api/riparaz/<codice_riparazione>')
+@module_required('glowne')
 def get_riparaz_details(codice_riparazione):
     """AJAX endpoint for fetching repair details."""
     try:
@@ -289,6 +293,7 @@ def get_riparaz_details(codice_riparazione):
 
 
 @linea_bp.route('/api/blocked-parts/<nr_niezg>')
+@module_required('glowne')
 def get_blocked_parts(nr_niezg):
     """AJAX endpoint for fetching blocked parts quantity for a NC number and related NCs."""
     try:

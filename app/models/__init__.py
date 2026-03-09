@@ -10,11 +10,14 @@ from app.models.sorting_area import (
     BrakiDefektyRaportu
 )
 from app.models.matlot import MatlotTracking
+from app.models.auth import User, Role
 
 __all__ = [
     'KategoriaZrodlaDanych',
     'Operator',
     'DaneRaportu',
     'BrakiDefektyRaportu',
-    'MatlotTracking'
+    'MatlotTracking',
+    'User',
+    'Role',
 ]

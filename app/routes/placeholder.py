@@ -6,11 +6,13 @@ from datetime import datetime, timedelta
 from app import db
 from app.models.sorting_area import DaneRaportu, BrakiDefektyRaportu, Operator, KategoriaZrodlaDanych
 from app.utils.excel_sync import sync_new_excel_data
+from app.utils.auth_helpers import module_required
 
 placeholder_bp = Blueprint('placeholder', __name__)
 
 
 @placeholder_bp.route('/wykaz-zablokowanych')
+@module_required('glowne')
 def wykaz_zablokowanych():
     """Lista zablokowanych detali z MOSYS — dane ładowane przez AJAX."""
     return render_template('placeholder/wykaz_zablokowanych.html')
@@ -34,6 +36,7 @@ def _format_blocked_parts(parts):
 
 
 @placeholder_bp.route('/api/wykaz-zablokowanych')
+@module_required('glowne')
 def api_wykaz_zablokowanych():
     """AJAX endpoint for blocked parts with server-side filtering, sorting and pagination."""
     sort_field = request.args.get('sort', 'KOD_DETALU')
@@ -117,6 +120,7 @@ def api_wykaz_zablokowanych():
 
 
 @placeholder_bp.route('/api/wykaz-zablokowanych/by-part')
+@module_required('glowne')
 def api_wykaz_zablokowanych_by_part():
     """AJAX endpoint: blocked parts grouped by part code (Kod detalu view)."""
     sort_field = request.args.get('sort', 'KOD_DETALU')
@@ -157,6 +161,7 @@ def api_wykaz_zablokowanych_by_part():
 
 
 @placeholder_bp.route('/wykaz-zablokowanych/boxes/<nr_niezgodnosci>')
+@module_required('glowne')
 def get_blocked_boxes(nr_niezgodnosci):
     """Get box details for a specific NC number."""
     try:
@@ -169,6 +174,7 @@ def get_blocked_boxes(nr_niezgodnosci):
 
 
 @placeholder_bp.route('/dane-selekcji')
+@module_required('glowne')
 def dane_selekcji():
     """Dashboard view with report table - optimized with pagination and date filters."""
 
@@ -428,6 +434,7 @@ def dane_selekcji():
 
 
 @placeholder_bp.route('/api/dane-selekcji')
+@module_required('glowne')
 def api_dane_selekcji():
     """AJAX endpoint for real-time filtering without page reload."""
 
@@ -689,6 +696,7 @@ def api_dane_selekcji():
 
 
 @placeholder_bp.route('/api/nc-history/<nr_niezgodnosci>')
+@module_required('glowne')
 def api_nc_history(nr_niezgodnosci):
     """AJAX endpoint: NC history entries + blocked parts summary for a given NC number."""
     try:
@@ -803,30 +811,35 @@ def api_nc_history(nr_niezgodnosci):
 
 
 @placeholder_bp.route('/analiza-danych')
+@module_required('analiza')
 def analiza_danych():
     """Analiza danych - under construction."""
     return render_template('placeholder/analiza_danych.html')
 
 
 @placeholder_bp.route('/dane-zamowien')
+@module_required('analiza')
 def dane_zamowien():
     """Dane zamówień produkcyjnych - under construction."""
     return render_template('placeholder/dane_zamowien.html')
 
 
 @placeholder_bp.route('/utrzymanie-form')
+@module_required('zarzadzanie')
 def utrzymanie_form():
     """Utrzymanie form - under construction."""
     return render_template('placeholder/utrzymanie_form.html')
 
 
 @placeholder_bp.route('/kontrola-jakosci')
+@module_required('zarzadzanie')
 def kontrola_jakosci():
     """Kontrola jakości - under construction."""
     return render_template('placeholder/kontrola_jakosci.html')
 
 
 @placeholder_bp.route('/admin/backfill-opis', methods=['POST'])
+@module_required('admin')
 def admin_backfill_opis():
     """One-time backfill: fetch opis_niezgodnosci from MOSYS for all records where it is NULL/empty."""
     try:
@@ -874,6 +887,7 @@ def admin_backfill_opis():
 
 
 @placeholder_bp.route('/admin/sync-excel', methods=['GET', 'POST'])
+@module_required('admin')
 def admin_sync_excel():
     """Admin endpoint to manually force Excel data sync."""
     try:

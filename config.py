@@ -7,6 +7,10 @@ class Config:
 
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
 
+    # Session settings (8-hour workday lifetime)
+    PERMANENT_SESSION_LIFETIME = 28800
+    SESSION_COOKIE_HTTPONLY = True
+
     # Local SQLite database for sorting area data
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'linea.db')
