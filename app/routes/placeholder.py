@@ -815,8 +815,169 @@ def api_nc_history(nr_niezgodnosci):
 @placeholder_bp.route('/analiza-danych')
 @module_required('analiza')
 def analiza_danych():
-    """Analiza danych - under construction."""
-    return render_template('placeholder/analiza_danych.html')
+    """Analiza danych — top NC groups from NOTCOJAN keyword classification."""
+    import re as _re
+    from MOSYS_data_functions import get_all_notcojan_for_analysis, NC_KEYWORD_CATEGORIES
+
+    error_msg = None
+    categories_top10 = []
+    total_nc_count = 0
+
+    try:
+        all_ncs = get_all_notcojan_for_analysis()
+        total_nc_count = len(all_ncs)
+
+        # Compile patterns once
+        compiled = [
+            {'name': c['name'], 'color': c['color'], 'rx': _re.compile(c['pattern'], _re.IGNORECASE)}
+            for c in NC_KEYWORD_CATEGORIES
+        ]
+
+        # Count per category
+        counts = {c['name']: 0 for c in NC_KEYWORD_CATEGORIES}
+        for nc in all_ncs:
+            text = nc.get('notes_text', '')
+            for cat in compiled:
+                if cat['rx'].search(text):
+                    counts[cat['name']] += 1
+                    break
+
+        # Build sorted category list (desc by count), take top 10
+        cat_color = {c['name']: c['color'] for c in NC_KEYWORD_CATEGORIES}
+        sorted_cats = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+        categories_top10 = [
+            {'name': name, 'count': count, 'color': cat_color[name]}
+            for name, count in sorted_cats[:10]
+            if count > 0
+        ]
+
+    except Exception as e:
+        error_msg = str(e)
+
+    return render_template(
+        'placeholder/analiza_danych.html',
+        categories_top10=categories_top10,
+        total_nc_count=total_nc_count,
+        error_msg=error_msg,
+    )
+
+
+@placeholder_bp.route('/api/nc-category-details/<path:category_name>')
+@module_required('analiza')
+def api_nc_category_details(category_name):
+    """AJAX: per-NC details for a given keyword category."""
+    import re as _re
+    from MOSYS_data_functions import get_all_notcojan_for_analysis, NC_KEYWORD_CATEGORIES
+
+    # Validate category_name
+    cat_cfg = next((c for c in NC_KEYWORD_CATEGORIES if c['name'] == category_name), None)
+    if cat_cfg is None:
+        return jsonify({'success': False, 'error': 'Category not found'}), 404
+
+    try:
+        all_ncs = get_all_notcojan_for_analysis()
+
+        # Compile all patterns for first-match classification
+        compiled = [
+            {'name': c['name'], 'color': c['color'], 'rx': _re.compile(c['pattern'], _re.IGNORECASE)}
+            for c in NC_KEYWORD_CATEGORIES
+        ]
+
+        # Collect NCs belonging to this category
+        matched_ncs = []
+        for nc in all_ncs:
+            text = nc.get('notes_text', '')
+            for cat in compiled:
+                if cat['rx'].search(text):
+                    if cat['name'] == category_name:
+                        matched_ncs.append(nc)
+                    break  # first-match wins
+
+        nr_list = [nc['nr_niezgodnosci'] for nc in matched_ncs]
+
+        # Batch blocked qty — single IN query on SEGCONF+MAGCONF
+        blocked_map = {}
+        if nr_list:
+            try:
+                from MOSYS_data_functions import get_pervasive
+                placeholders = ','.join(['?' for _ in nr_list])
+                q_blocked = f'''
+                    SELECT SEGCONF.NUMERO_NON_CONF,
+                           SUM(MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) AS TOTAL
+                    FROM STAAMPDB.SEGCONF SEGCONF
+                    INNER JOIN STAAMPDB.MAGCONF MAGCONF
+                        ON SEGCONF.NUMERO_CONFEZIONE = MAGCONF.NUMERO_CONFEZIONE
+                    WHERE SEGCONF.NUMERO_NON_CONF IN ({placeholders})
+                      AND (MAGCONF.QT_CONTENUTA - MAGCONF.QT_PRELEV) > 0
+                    GROUP BY SEGCONF.NUMERO_NON_CONF
+                '''
+                df_blocked = get_pervasive(q_blocked, tuple(nr_list))
+                for _, row in df_blocked.iterrows():
+                    key = str(row['NUMERO_NON_CONF']).strip()
+                    blocked_map[key] = int(row['TOTAL']) if row['TOTAL'] else 0
+            except Exception as e:
+                print(f"[api_nc_category_details] blocked qty error: {e}")
+
+        # Sorting summary — batch from SQLite
+        sorting_map = {}
+        if nr_list:
+            try:
+                reports = DaneRaportu.query.options(
+                    joinedload(DaneRaportu.braki_defekty)
+                ).filter(DaneRaportu.nr_niezgodnosci.in_(nr_list)).all()
+
+                for r in reports:
+                    key = r.nr_niezgodnosci or ''
+                    if key not in sorting_map:
+                        sorting_map[key] = {'qty_checked': 0, 'qty_nok': 0}
+                    sorting_map[key]['qty_checked'] += r.ilosc_detali_sprawdzonych or 0
+                    sorting_map[key]['qty_nok'] += r.total_defects
+            except Exception as e:
+                print(f"[api_nc_category_details] SQLite sorting error: {e}")
+
+        # Determine open/closed: no blocked qty → treat as closed
+        ncs_out = []
+        for nc in matched_ncs:
+            nr = nc['nr_niezgodnosci']
+            blocked_qty = blocked_map.get(nr, 0)
+            is_open = blocked_qty > 0
+
+            srt = sorting_map.get(nr)
+            if srt and srt['qty_checked'] > 0:
+                scrap_rate = round(srt['qty_nok'] / srt['qty_checked'] * 100, 1)
+                sorting_out = {
+                    'qty_checked': srt['qty_checked'],
+                    'qty_nok': srt['qty_nok'],
+                    'scrap_rate': scrap_rate,
+                }
+            else:
+                sorting_out = None
+
+            data_nc = nc.get('data_nc')
+            ncs_out.append({
+                'nr_niezgodnosci': nr,
+                'commessa': nc.get('commessa', ''),
+                'data_nc': data_nc.strftime('%d.%m.%Y') if data_nc else '-',
+                'notes_text': nc.get('notes_text', ''),
+                'blocked_qty': blocked_qty,
+                'is_open': is_open,
+                'sorting': sorting_out,
+            })
+
+        # Sort: open first, then by nr_niezgodnosci desc within each group
+        ncs_out.sort(key=lambda x: (0 if x['is_open'] else 1, [-ord(c) for c in x['nr_niezgodnosci']]))
+
+        return jsonify({
+            'success': True,
+            'category': cat_cfg['name'],
+            'color': cat_cfg['color'],
+            'count': len(ncs_out),
+            'ncs': ncs_out,
+        })
+
+    except Exception as e:
+        print(f"[api_nc_category_details] error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @placeholder_bp.route('/dane-zamowien')
@@ -841,9 +1002,9 @@ def kontrola_jakosci():
 
 KOLUMN_ETYKIETY = {
     'DATA_RILEVAMENTO': 'Data pomiaru',
-    'ORA_RILEVAMENTO': 'Czas pomiaru',
-    'DESCRIZIONE': 'Specyfikacja wymiaru',
-    'NUMERO_STAMPATA': 'Nr strzału',
+    'ORA_RILEVAMENTO': 'Godzina pomiaru',
+    'DESCRIZIONE': 'Opis charakterystyki',
+    'NUMERO_STAMPATA': 'Wtrysk',
     'NUMERO_FIGURA': 'Nr gniazda',
     'MIS01': 'Pomiar 1',
     'MIS02': 'Pomiar 2',

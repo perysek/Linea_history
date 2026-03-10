@@ -1,14 +1,313 @@
-{% extends 'placeholder/base_placeholder.html' %}
+{% extends 'base.html' %}
 
-{% set page_title = 'Analiza danych' %}
+{% block title %}Analiza danych - LINEA{% endblock %}
 
-{% block todo_items %}
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📊 Dashboard z głównymi wskaźnikami KPI</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📈 Wykresy trendów niezgodności (dzienny, tygodniowy, miesięczny)</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🎯 Analiza Pareto - najczęstsze typy niezgodności</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🏭 Statystyki per maszyna / linia produkcyjna</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📉 Wskaźniki jakości (PPM, FTY, scrap rate)</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">⏱️ Średni czas naprawy (MTTR)</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📅 Porównania okres do okresu</li>
-<li style="padding: 0.5rem 0;">💾 Zapis raportów do PDF</li>
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
+<style>
+.section-card {
+    background: #fff;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 4px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.section-card h2 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ink, #1e293b);
+    margin: 0 0 0.875rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.nc-category-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.nc-category-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.nc-category-item:hover {
+    background: #f8fafc;
+}
+.nc-rank {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--color-ink-muted, #64748b);
+    width: 1.25rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+.category-badge {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    border-width: 1px;
+    border-style: solid;
+    white-space: nowrap;
+}
+.nc-count-label {
+    font-size: 0.6875rem;
+    color: var(--color-ink-muted, #64748b);
+    margin-left: auto;
+    white-space: nowrap;
+}
+.nc-arrow {
+    font-size: 0.6875rem;
+    color: var(--color-ink-muted, #64748b);
+}
+.error-banner {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    font-size: 0.75rem;
+    margin-bottom: 1rem;
+}
+/* Modal overrides for this page */
+#category-modal .modal-header {
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+#category-modal .modal-subtitle {
+    font-size: 0.6875rem;
+    color: var(--color-ink-muted, #64748b);
+    margin-top: 0.2rem;
+}
+#category-modal table td,
+#category-modal table th {
+    font-size: 0.6875rem;
+}
+.badge-open {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+.badge-closed {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="refined-page fade-in">
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1 class="page-title">Analiza danych</h1>
+        <p style="font-size: 0.75rem; color: var(--color-ink-muted, #64748b); margin: 0.25rem 0 0 0;">
+            Klasyfikacja {{ total_nc_count }} niezgodności wg słów kluczowych
+        </p>
+    </header>
+
+    {% if error_msg %}
+    <div class="error-banner">
+        Błąd połączenia z MOSYS: {{ error_msg }}
+    </div>
+    {% endif %}
+
+    <!-- Top 10 NC Groups -->
+    <div class="section-card">
+        <h2>Top {{ categories_top10|length }} grup niezgodności</h2>
+        {% if categories_top10 %}
+        <ol class="nc-category-list">
+            {% for cat in categories_top10 %}
+            <li class="nc-category-item" onclick="openCategoryModal('{{ cat.name|e }}')">
+                <span class="nc-rank">{{ loop.index }}</span>
+                <span class="category-badge"
+                      style="background: {{ cat.color }}33; border-color: {{ cat.color }}66; color: {{ cat.color }};">
+                    {{ cat.name }}
+                </span>
+                <span class="nc-count-label">{{ cat.count }} NC</span>
+                <span class="nc-arrow">›</span>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <p style="font-size: 0.75rem; color: var(--color-ink-muted, #64748b); margin: 0;">
+            {% if error_msg %}Brak danych — sprawdź połączenie z MOSYS.{% else %}Brak niezgodności do wyświetlenia.{% endif %}
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Planned features (preserved TODO list) -->
+    <div class="section-card">
+        <h2>Planowane funkcjonalności</h2>
+        <ul style="margin: 0; padding: 0 0 0 1.25rem; font-size: 0.6875rem; color: var(--color-ink-muted, #64748b); line-height: 1.8;">
+            <li>Dashboard z głównymi wskaźnikami KPI</li>
+            <li>Wykresy trendów niezgodności (dzienny, tygodniowy, miesięczny)</li>
+            <li>Analiza Pareto — najczęstsze typy niezgodności</li>
+            <li>Statystyki per maszyna / linia produkcyjna</li>
+            <li>Wskaźniki jakości (PPM, FTY, scrap rate)</li>
+            <li>Średni czas naprawy (MTTR)</li>
+            <li>Porównania okres do okresu</li>
+            <li>Zapis raportów do PDF</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Category Detail Modal -->
+<div class="modal-overlay" id="category-modal" onclick="closeCategoryModalOnBackdrop(event)">
+    <div class="modal-container" style="max-width: 900px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header" style="display: flex; align-items: flex-start; justify-content: space-between;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span id="modal-cat-badge" class="category-badge"></span>
+                </div>
+                <p class="modal-subtitle" id="modal-cat-subtitle" style="margin:0.25rem 0 0 0;"></p>
+            </div>
+            <button onclick="closeCategoryModal()" class="modal-close-btn" title="Zamknij">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body" id="modal-body" style="overflow-y: auto; flex: 1; padding: 0;">
+            <div id="modal-loading" style="text-align: center; padding: 2rem; font-size: 0.75rem; color: #64748b;">
+                Ładowanie...
+            </div>
+            <table class="refined-table" id="modal-table" style="display:none; width: 100%;">
+                <colgroup>
+                    <col style="width: 10%;">  <!-- Nr NC -->
+                    <col style="width: 10%;">  <!-- Commessa -->
+                    <col style="width: 9%;">   <!-- Data NC -->
+                    <col style="width: 7%;">   <!-- Status -->
+                    <col style="width: 8%;">   <!-- Zabl. qty -->
+                    <col style="width: 46%;">  <!-- Opis -->
+                    <col style="width: 10%;">  <!-- Selekcja -->
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Nr NC</th>
+                        <th>Commessa</th>
+                        <th>Data NC</th>
+                        <th>Status</th>
+                        <th>Zabl. qty</th>
+                        <th>Opis</th>
+                        <th>Selekcja</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function openCategoryModal(name) {
+    const modal = document.getElementById('category-modal');
+    modal.classList.add('active');
+    document.getElementById('modal-cat-badge').textContent = name;
+    document.getElementById('modal-cat-badge').removeAttribute('style');
+    document.getElementById('modal-cat-subtitle').textContent = '';
+    document.getElementById('modal-loading').style.display = 'block';
+    document.getElementById('modal-table').style.display = 'none';
+    document.getElementById('modal-tbody').innerHTML = '';
+
+    fetch('/api/nc-category-details/' + encodeURIComponent(name))
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('modal-loading').style.display = 'none';
+            if (!data.success) {
+                document.getElementById('modal-loading').style.display = 'block';
+                document.getElementById('modal-loading').textContent = 'Błąd: ' + escapeHtml(data.error);
+                return;
+            }
+
+            // Update header
+            const badge = document.getElementById('modal-cat-badge');
+            badge.textContent = data.category;
+            badge.style.background = data.color + '33';
+            badge.style.borderColor = data.color + '66';
+            badge.style.color = data.color;
+
+            document.getElementById('modal-cat-subtitle').textContent =
+                data.count + ' niezgodności w tej kategorii';
+
+            // Build rows
+            const tbody = document.getElementById('modal-tbody');
+            tbody.innerHTML = '';
+            data.ncs.forEach(nc => {
+                const statusBadge = nc.is_open
+                    ? '<span class="badge-open">Otwarte</span>'
+                    : '<span class="badge-closed">Zamknięte</span>';
+
+                const blockedStr = nc.blocked_qty > 0
+                    ? nc.blocked_qty.toLocaleString('pl-PL')
+                    : '<span style="color:#cbd5e1;">—</span>';
+
+                let sortingStr = '<span style="color:#cbd5e1;">—</span>';
+                if (nc.sorting) {
+                    const s = nc.sorting;
+                    sortingStr = s.qty_checked.toLocaleString('pl-PL') + ' szt. / ' + s.scrap_rate + '% brk';
+                }
+
+                const shortNotes = nc.notes_text.length > 80
+                    ? nc.notes_text.substring(0, 80) + '…'
+                    : nc.notes_text;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td style="font-weight:600;">' + escapeHtml(nc.nr_niezgodnosci) + '</td>' +
+                    '<td>' + escapeHtml(nc.commessa) + '</td>' +
+                    '<td>' + escapeHtml(nc.data_nc) + '</td>' +
+                    '<td>' + statusBadge + '</td>' +
+                    '<td style="text-align:right;">' + blockedStr + '</td>' +
+                    '<td title="' + escapeHtml(nc.notes_text) + '">' + escapeHtml(shortNotes) + '</td>' +
+                    '<td>' + sortingStr + '</td>';
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('modal-table').style.display = '';
+        })
+        .catch(err => {
+            document.getElementById('modal-loading').style.display = 'block';
+            document.getElementById('modal-loading').textContent = 'Błąd sieci: ' + escapeHtml(String(err));
+        });
+}
+
+function closeCategoryModal() {
+    document.getElementById('category-modal').classList.remove('active');
+}
+
+function closeCategoryModalOnBackdrop(event) {
+    if (event.target === document.getElementById('category-modal')) {
+        closeCategoryModal();
+    }
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeCategoryModal();
+});
+</script>
 {% endblock %}
