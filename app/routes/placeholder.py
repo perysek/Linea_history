@@ -839,11 +839,300 @@ def kontrola_jakosci():
     """Kontrola jakości - under construction."""
     return render_template('placeholder/kontrola_jakosci.html')
 
+KOLUMN_ETYKIETY = {
+    'DATA_RILEVAMENTO': 'Data pomiaru',
+    'ORA_RILEVAMENTO': 'Czas pomiaru',
+    'DESCRIZIONE': 'Specyfikacja wymiaru',
+    'NUMERO_STAMPATA': 'Nr strzału',
+    'NUMERO_FIGURA': 'Nr gniazda',
+    'MIS01': 'Pomiar 1',
+    'MIS02': 'Pomiar 2',
+    'MIS03': 'Pomiar 3',
+    'MIS04': 'Pomiar 4',
+    'MIS05': 'Pomiar 5',
+    'MIS06': 'Pomiar 6',
+    'MIS07': 'Pomiar 7',
+    'MIS08': 'Pomiar 8',
+    'MIS09': 'Pomiar 9',
+    'MIS10': 'Pomiar 10',
+}
+
+_TABLE_COLUMNS = [
+    'DATA_RILEVAMENTO', 'ORA_RILEVAMENTO', 'DESCRIZIONE',
+    'NUMERO_STAMPATA', 'NUMERO_FIGURA',
+    'MIS01', 'MIS02', 'MIS03', 'MIS04', 'MIS05',
+    'MIS06', 'MIS07', 'MIS08', 'MIS09', 'MIS10',
+]
+
+_RESULTS_COLUMNS = [
+    'MIS01', 'MIS02', 'MIS03', 'MIS04', 'MIS05',
+    'MIS06', 'MIS07', 'MIS08', 'MIS09', 'MIS10',
+]
+
+
+def _build_nrildim_query(articolo, numero_riferimento, date_from, date_to):
+    """Build the main NRILDIM + NSCHEDIM query and params tuple."""
+    import pandas as pd
+    parts = [
+        "SELECT NRILDIM.*, NSCHEDIM.DESCRIZIONE ",
+        "FROM STAAMPDB.NRILDIM NRILDIM ",
+        "LEFT JOIN STAAMPDB.NSCHEDIM NSCHEDIM "
+        "ON NRILDIM.NUMERO_RIFERIMENTO = NSCHEDIM.NUMERO_RIFERIMENTO ",
+        "WHERE 1=1",
+    ]
+    params = []
+
+    if articolo:
+        parts.append("AND NRILDIM.ARTICOLO LIKE ?")
+        params.append(f"{articolo}%")
+    if numero_riferimento:
+        parts.append("AND NRILDIM.NUMERO_RIFERIMENTO = ?")
+        params.append(numero_riferimento)
+    if date_from:
+        parts.append("AND NRILDIM.DATA_RILEVAMENTO >= ?")
+        params.append(date_from.replace('-', ''))
+    if date_to:
+        parts.append("AND NRILDIM.DATA_RILEVAMENTO <= ?")
+        params.append(date_to.replace('-', ''))
+    if not (articolo or numero_riferimento or date_from or date_to):
+        parts.append("AND NRILDIM.DATA_RILEVAMENTO LIKE '2025%'")
+
+    return " ".join(parts), tuple(params)
+
+
+def _format_nrildim_df(df):
+    """Apply date/time/MIS formatting to a raw NRILDIM dataframe."""
+    import pandas as pd
+
+    if 'DATA_RILEVAMENTO' in df.columns:
+        df['DATA_RILEVAMENTO'] = df['DATA_RILEVAMENTO'].astype(str).str.strip()
+        mask = df['DATA_RILEVAMENTO'].str.len() == 8
+        df.loc[mask, 'DATA_RILEVAMENTO'] = (
+            df.loc[mask, 'DATA_RILEVAMENTO'].str[:4] + '-' +
+            df.loc[mask, 'DATA_RILEVAMENTO'].str[4:6] + '-' +
+            df.loc[mask, 'DATA_RILEVAMENTO'].str[6:8]
+        )
+
+    if 'ORA_RILEVAMENTO' in df.columns:
+        df['ORA_RILEVAMENTO'] = df['ORA_RILEVAMENTO'].astype(str).str.strip()
+        mask_t = df['ORA_RILEVAMENTO'].str.len() == 6
+        df.loc[mask_t, 'ORA_RILEVAMENTO'] = (
+            df.loc[mask_t, 'ORA_RILEVAMENTO'].str[:2] + ':' +
+            df.loc[mask_t, 'ORA_RILEVAMENTO'].str[2:4] + ':' +
+            df.loc[mask_t, 'ORA_RILEVAMENTO'].str[4:6]
+        )
+
+    if 'NUMERO_STAMPATA' in df.columns:
+        df['NUMERO_STAMPATA'] = df['NUMERO_STAMPATA'].astype(str).str.strip().str[-1:]
+    if 'NUMERO_FIGURA' in df.columns:
+        df['NUMERO_FIGURA'] = df['NUMERO_FIGURA'].astype(str).str.strip().str[-1:]
+
+    mis_present = [c for c in _RESULTS_COLUMNS if c in df.columns]
+    if mis_present:
+        df[mis_present] = df[mis_present].apply(pd.to_numeric, errors='coerce')
+        df[mis_present] = df[mis_present] / 10000.0
+
+    return df
+
+
 @placeholder_bp.route('/kontrola-jakosci-lab')
 @module_required('zarzadzanie')
 def kontrola_jakosci_lab():
-    """Kontrola jakości lab - under construction."""
-    return render_template('placeholder/kontrola_jakosci_lab.html')
+    """Wyniki pomiarów laboratoryjnych z MOSYS NRILDIM."""
+    import pandas as pd
+    from MOSYS_data_functions import get_pervasive
+
+    articolo          = request.args.get('articolo', '').strip()
+    date_from         = request.args.get('date_from', '').strip()
+    date_to           = request.args.get('date_to', '').strip()
+    numero_riferimento = request.args.get('numero_riferimento', '').strip()
+    action            = request.args.get('action', '').strip()
+
+    riferimento_options = []
+    if action == 'fetch':
+        try:
+            nschedim_df = get_pervasive(
+                "SELECT NUMERO_RIFERIMENTO, DESCRIZIONE, FLAG_RIMOSSO FROM STAAMPDB.NSCHEDIM"
+            )
+            riferimento_options = nschedim_df.to_dict('records')
+        except Exception as e:
+            current_app.logger.warning(f"kontrola_jakosci_lab: NSCHEDIM fetch failed: {e}")
+
+    if action != 'fetch':
+        return render_template(
+            'placeholder/kontrola_jakosci_lab.html',
+            columns=_TABLE_COLUMNS,
+            data=None,
+            riferimento_options=[],
+            column_labels=KOLUMN_ETYKIETY,
+            articolo=articolo,
+            date_from=date_from,
+            date_to=date_to,
+            numero_riferimento=numero_riferimento,
+        )
+
+    query, params = _build_nrildim_query(articolo, numero_riferimento, date_from, date_to)
+    try:
+        df = get_pervasive(query, params=params)
+    except Exception as e:
+        current_app.logger.error(f"kontrola_jakosci_lab DB error: {e}", exc_info=True)
+        df = pd.DataFrame()
+
+    df = _format_nrildim_df(df)
+
+    valid_mis = [c for c in _RESULTS_COLUMNS if c in df.columns and df[c].notna().any()]
+
+    if riferimento_options and 'NUMERO_RIFERIMENTO' in df.columns:
+        unique_refs = set(df['NUMERO_RIFERIMENTO'].dropna().unique())
+        riferimento_options = [o for o in riferimento_options if o['NUMERO_RIFERIMENTO'] in unique_refs]
+
+    final_columns = [c for c in _TABLE_COLUMNS if c not in _RESULTS_COLUMNS] + valid_mis
+    final_columns = [c for c in final_columns if c in df.columns]
+
+    data = df[final_columns].to_dict(orient='records') if not df.empty else []
+
+    return render_template(
+        'placeholder/kontrola_jakosci_lab.html',
+        columns=final_columns,
+        data=data,
+        riferimento_options=riferimento_options,
+        column_labels=KOLUMN_ETYKIETY,
+        articolo=articolo,
+        date_from=date_from,
+        date_to=date_to,
+        numero_riferimento=numero_riferimento,
+    )
+
+
+@placeholder_bp.route('/kontrola-jakosci-lab/graph')
+@module_required('zarzadzanie')
+def kontrola_jakosci_lab_graph():
+    """Wykres trend pomiarów z MOSYS – Cp/Cpk."""
+    import json
+    import pandas as pd
+    from MOSYS_data_functions import get_pervasive
+
+    articolo           = request.args.get('articolo', '').strip()
+    numero_riferimento = request.args.get('numero_riferimento', '').strip()
+    date_from          = request.args.get('date_from', '').strip()
+    date_to            = request.args.get('date_to', '').strip()
+
+    parts = [
+        "SELECT NRILDIM.*, NSCHEDIM.DESCRIZIONE, NSCHEDIM.VALORE_NOMINALE ",
+        "FROM STAAMPDB.NRILDIM NRILDIM ",
+        "LEFT JOIN STAAMPDB.NSCHEDIM NSCHEDIM "
+        "ON NRILDIM.NUMERO_RIFERIMENTO = NSCHEDIM.NUMERO_RIFERIMENTO ",
+        "WHERE 1=1",
+    ]
+    params = []
+    if articolo:
+        parts.append("AND NRILDIM.ARTICOLO LIKE ?")
+        params.append(f"{articolo}%")
+    if numero_riferimento:
+        parts.append("AND NRILDIM.NUMERO_RIFERIMENTO = ?")
+        params.append(numero_riferimento)
+    if date_from:
+        parts.append("AND NRILDIM.DATA_RILEVAMENTO >= ?")
+        params.append(date_from.replace('-', ''))
+    if date_to:
+        parts.append("AND NRILDIM.DATA_RILEVAMENTO <= ?")
+        params.append(date_to.replace('-', ''))
+    parts.append("ORDER BY NRILDIM.DATA_RILEVAMENTO, NRILDIM.ORA_RILEVAMENTO")
+    query = " ".join(parts)
+
+    try:
+        df = get_pervasive(query, params=tuple(params))
+    except Exception as e:
+        current_app.logger.error(f"kontrola_jakosci_lab_graph DB error: {e}", exc_info=True)
+        return render_template('placeholder/kontrola_jakosci_lab_graph.html',
+                               error="Błąd pobierania danych z bazy MOSYS.")
+
+    if df.empty:
+        return render_template('placeholder/kontrola_jakosci_lab_graph.html',
+                               error="Brak danych dla wybranych filtrów.")
+
+    mis_present = [c for c in _RESULTS_COLUMNS if c in df.columns]
+    if mis_present:
+        df[mis_present] = df[mis_present].apply(pd.to_numeric, errors='coerce')
+        df[mis_present] = df[mis_present] / 10000.0
+
+    df['MIS_AVG'] = df[mis_present].mean(axis=1, skipna=True)
+
+    df['DATA_RILEVAMENTO'] = df['DATA_RILEVAMENTO'].astype(str).str.strip()
+    df['ORA_RILEVAMENTO']  = df['ORA_RILEVAMENTO'].astype(str).str.strip().str.zfill(6)
+    df['DATETIME'] = (
+        df['DATA_RILEVAMENTO'] + ' ' +
+        df['ORA_RILEVAMENTO'].str[:2] + ':' +
+        df['ORA_RILEVAMENTO'].str[2:4] + ':' +
+        df['ORA_RILEVAMENTO'].str[4:6]
+    )
+
+    numero_figura_values = df['NUMERO_FIGURA'].dropna().unique().tolist()
+
+    valore_nominale = usl = lsl = None
+    if numero_riferimento:
+        try:
+            tol_df = get_pervasive(
+                """SELECT CODICE_ARTICOLO, RIF_MISURA, UN_MIS, VALORE_NOMINALE,
+                          SEGNO_TOLL_INF, TOLL_INF, SEGNO_TOLL_SUP, TOLL_SUP
+                   FROM STAAMPDB.SCHEDIM1 SCHEDIM1
+                   WHERE SCHEDIM1.RIF_MISURA = ?""",
+                params=(numero_riferimento,),
+            )
+            if not tol_df.empty:
+                r = tol_df.iloc[0]
+                valore_nominale = float(r['VALORE_NOMINALE']) if pd.notna(r['VALORE_NOMINALE']) else None
+                sign_inf = str(r['SEGNO_TOLL_INF']).strip() if pd.notna(r['SEGNO_TOLL_INF']) else '+'
+                sign_sup = str(r['SEGNO_TOLL_SUP']).strip() if pd.notna(r['SEGNO_TOLL_SUP']) else '+'
+                toll_inf = float(r['TOLL_INF']) if pd.notna(r['TOLL_INF']) else 0.0
+                toll_sup = float(r['TOLL_SUP']) if pd.notna(r['TOLL_SUP']) else 0.0
+                if valore_nominale is not None:
+                    lim_inf = valore_nominale + toll_inf if sign_inf == '+' else valore_nominale - toll_inf
+                    lim_sup = valore_nominale + toll_sup if sign_sup == '+' else valore_nominale - toll_sup
+                    usl = max(lim_inf, lim_sup)
+                    lsl = min(lim_inf, lim_sup)
+        except Exception as e:
+            current_app.logger.warning(f"kontrola_jakosci_lab_graph tolerance fetch failed: {e}")
+
+    capability_data = {}
+    if usl is not None and lsl is not None:
+        for figura in numero_figura_values:
+            vals = df[df['NUMERO_FIGURA'] == figura]['MIS_AVG'].dropna()
+            if len(vals) > 1:
+                mean = vals.mean()
+                std  = vals.std()
+                if std > 0:
+                    cp   = (usl - lsl) / (6 * std)
+                    cpk  = min((usl - mean) / (3 * std), (mean - lsl) / (3 * std))
+                    capability_data[str(figura)] = {
+                        'cp': round(cp, 3), 'cpk': round(cpk, 3),
+                        'mean': round(mean, 3), 'std': round(std, 3),
+                    }
+
+    chart_data = {}
+    for figura in numero_figura_values:
+        sub = df[df['NUMERO_FIGURA'] == figura].dropna(subset=['MIS_AVG'])
+        chart_data[str(figura)] = {
+            'labels': sub['DATETIME'].tolist(),
+            'values': sub['MIS_AVG'].round(3).tolist(),
+        }
+
+    descrizione = df['DESCRIZIONE'].iloc[0] if 'DESCRIZIONE' in df.columns else numero_riferimento
+
+    return render_template(
+        'placeholder/kontrola_jakosci_lab_graph.html',
+        chart_data=json.dumps(chart_data),
+        descrizione=descrizione,
+        numero_figura_count=len(numero_figura_values),
+        valore_nominale=valore_nominale,
+        usl=usl,
+        lsl=lsl,
+        capability_data=json.dumps(capability_data),
+        column_labels=KOLUMN_ETYKIETY,
+        articolo=articolo,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 @placeholder_bp.route('/admin/backfill-opis', methods=['POST'])
 @module_required('admin')

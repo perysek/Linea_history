@@ -1,0 +1,299 @@
+{% extends 'base.html' %}
+
+{% block title %}Wykres trendu pomiarów – laboratorium{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.kj-graph-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.kj-graph-header {
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.kj-graph-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-ink);
+}
+.kj-graph-subtitle {
+    font-size: 0.75rem;
+    color: var(--color-ink-subtle);
+    margin-top: 0.125rem;
+}
+.kj-btn-back {
+    height: 2rem;
+    padding: 0 0.875rem;
+    background: white;
+    color: var(--color-ink);
+    border: 1px solid var(--color-border);
+    border-radius: 5px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.kj-btn-back:hover { background: #f8f8f8; }
+
+.kj-capability-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.kj-capability-card {
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    min-width: 11rem;
+}
+.kj-cap-title {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-ink-subtle);
+    margin-bottom: 0.5rem;
+}
+.kj-cap-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 0.75rem;
+}
+.kj-cap-item { font-size: 0.75rem; color: var(--color-ink); }
+.kj-cap-item span:first-child { color: var(--color-ink-subtle); margin-right: 0.2rem; }
+.kj-cap-item .cpk-good  { color: #16a34a; font-weight: 600; }
+.kj-cap-item .cpk-warn  { color: #ca8a04; font-weight: 600; }
+.kj-cap-item .cpk-bad   { color: #dc2626; font-weight: 600; }
+
+.kj-tolerance-bar {
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.625rem 1rem;
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--color-ink);
+}
+.kj-tolerance-bar .lbl { color: var(--color-ink-subtle); }
+.kj-tolerance-bar strong { font-variant-numeric: tabular-nums; }
+
+.kj-chart-card {
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    height: 420px;
+    position: relative;
+}
+
+.kj-error {
+    background: white;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    color: #dc2626;
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="refined-page fade-in">
+    <header class="page-header">
+        <h1 class="page-title">Wykres trendu pomiarów</h1>
+    </header>
+
+    {% if error is defined and error %}
+    <div class="kj-error">
+        <p>{{ error }}</p>
+        <button class="kj-btn-back" style="margin-top:1rem"
+                onclick="window.history.back()">Wróć do tabeli</button>
+    </div>
+
+    {% else %}
+    <div class="kj-graph-wrap">
+
+        <!-- Header with back button -->
+        <div class="kj-graph-header">
+            <div>
+                <div class="kj-graph-title">Wykres trendu pomiarów laboratoryjnych</div>
+                {% if descrizione %}
+                <div class="kj-graph-subtitle">Wymiar: <strong>{{ descrizione }}</strong></div>
+                {% endif %}
+            </div>
+            <button class="kj-btn-back" onclick="window.history.back()">
+                ← Wróć do tabeli
+            </button>
+        </div>
+
+        <!-- Tolerance reference bar -->
+        <div id="kjTolBar" class="kj-tolerance-bar" style="display:none">
+            <span><span class="lbl">Wartość nominalna:</span> <strong id="kjNominal">–</strong></span>
+            <span><span class="lbl">USL:</span> <strong id="kjUsl" style="color:#dc2626">–</strong></span>
+            <span><span class="lbl">LSL:</span> <strong id="kjLsl" style="color:#dc2626">–</strong></span>
+        </div>
+
+        <!-- Capability cards -->
+        <div class="kj-capability-grid" id="kjCapGrid"></div>
+
+        <!-- Chart -->
+        <div class="kj-chart-card">
+            <canvas id="kjChart"></canvas>
+        </div>
+
+    </div>
+    {% endif %}
+</div>
+
+{% if not (error is defined and error) %}
+<script>
+var chartData       = {{ chart_data|safe }};
+var capabilityData  = {{ capability_data|safe }};
+var valoreNominale  = {{ valore_nominale if valore_nominale is not none else 'null' }};
+var usl             = {{ usl if usl is not none else 'null' }};
+var lsl             = {{ lsl if lsl is not none else 'null' }};
+var columnLabels    = {{ column_labels|tojson|safe }};
+var cavityLabel     = columnLabels['NUMERO_FIGURA'] || 'Gniazdo';
+
+/* ── Tolerance bar ── */
+if (valoreNominale !== null || (usl !== null && lsl !== null)) {
+    document.getElementById('kjTolBar').style.display = 'flex';
+    if (valoreNominale !== null)
+        document.getElementById('kjNominal').textContent = valoreNominale.toFixed(3);
+    if (usl !== null) document.getElementById('kjUsl').textContent = usl.toFixed(3);
+    if (lsl !== null) document.getElementById('kjLsl').textContent = lsl.toFixed(3);
+}
+
+/* ── Capability cards ── */
+var capKeys = Object.keys(capabilityData);
+if (capKeys.length) {
+    var grid = document.getElementById('kjCapGrid');
+    capKeys.forEach(function(fig) {
+        var d = capabilityData[fig];
+        var cpkClass = d.cpk >= 1.33 ? 'cpk-good' : (d.cpk >= 1.0 ? 'cpk-warn' : 'cpk-bad');
+        grid.innerHTML +=
+            '<div class="kj-capability-card">' +
+            '  <div class="kj-cap-title">' + cavityLabel + ': ' + fig + '</div>' +
+            '  <div class="kj-cap-stats">' +
+            '    <div class="kj-cap-item"><span>Cp:</span>' + d.cp + '</div>' +
+            '    <div class="kj-cap-item"><span>Cpk:</span><span class="' + cpkClass + '">' + d.cpk + '</span></div>' +
+            '    <div class="kj-cap-item"><span>Śr.:</span>' + d.mean + '</div>' +
+            '    <div class="kj-cap-item"><span>Odch.:</span>' + d.std + '</div>' +
+            '  </div>' +
+            '</div>';
+    });
+}
+
+/* ── Chart.js ── */
+var COLORS = [
+    'rgb(54,162,235)', 'rgb(255,99,132)', 'rgb(75,192,192)',
+    'rgb(255,159,64)', 'rgb(153,102,255)', 'rgb(255,205,86)',
+    'rgb(201,203,207)', 'rgb(255,99,255)',
+];
+
+var figKeys  = Object.keys(chartData);
+var datasets = [];
+
+figKeys.forEach(function(fig, idx) {
+    var color = COLORS[idx % COLORS.length];
+    datasets.push({
+        label: cavityLabel + ': ' + fig,
+        data: chartData[fig].values,
+        borderColor: color,
+        backgroundColor: color.replace('rgb', 'rgba').replace(')', ',0.1)'),
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.1,
+    });
+});
+
+/* Merge all datetime labels */
+var allLabels = [];
+figKeys.forEach(function(fig) {
+    chartData[fig].labels.forEach(function(l) {
+        if (allLabels.indexOf(l) < 0) allLabels.push(l);
+    });
+});
+allLabels.sort();
+
+/* Align each dataset to common labels */
+datasets.forEach(function(ds, idx) {
+    var fig  = figKeys[idx];
+    var lbls = chartData[fig].labels;
+    var vals = chartData[fig].values;
+    ds.data  = allLabels.map(function(l) {
+        var i = lbls.indexOf(l);
+        return i >= 0 ? vals[i] : null;
+    });
+});
+
+/* USL / LSL / nominal reference lines */
+if (usl !== null) {
+    datasets.push({
+        label: 'USL', data: allLabels.map(function() { return usl; }),
+        borderColor: 'rgb(220,38,38)', borderWidth: 2, borderDash: [5,5],
+        pointRadius: 0, tension: 0,
+    });
+}
+if (lsl !== null) {
+    datasets.push({
+        label: 'LSL', data: allLabels.map(function() { return lsl; }),
+        borderColor: 'rgb(220,38,38)', borderWidth: 2, borderDash: [5,5],
+        pointRadius: 0, tension: 0,
+    });
+}
+if (valoreNominale !== null) {
+    datasets.push({
+        label: 'Nominal', data: allLabels.map(function() { return valoreNominale; }),
+        borderColor: 'rgb(34,197,94)', borderWidth: 2, borderDash: [10,5],
+        pointRadius: 0, tension: 0,
+    });
+}
+
+/* Y-axis bounds with 10% padding around tolerance range */
+var yAxis = { display: true, title: { display: true, text: 'Średni wynik pomiaru', font: { size: 12 } } };
+if (usl !== null && lsl !== null) {
+    var pad = (usl - lsl) * 0.1;
+    yAxis.min = lsl - pad;
+    yAxis.max = usl + pad;
+}
+
+new Chart(document.getElementById('kjChart').getContext('2d'), {
+    type: 'line',
+    data: { labels: allLabels, datasets: datasets },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+            x: {
+                display: true,
+                title: { display: true, text: 'Data i czas', font: { size: 11 } },
+                ticks: { maxRotation: 45, minRotation: 30, font: { size: 9 } },
+            },
+            y: yAxis,
+        },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+    },
+});
+</script>
+{% endif %}
+{% endblock %}

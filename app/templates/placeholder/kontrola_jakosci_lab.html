@@ -1,14 +1,483 @@
-{% extends 'placeholder/base_placeholder.html' %}
+{% extends 'base.html' %}
 
-{% set page_title = 'Kontrola jakości' %}
+{% block title %}Kontrola jakości – laboratorium{% endblock %}
 
-{% block todo_items %}
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">🔍 Wyniki kontroli z tabeli COLLAUDO</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📊 Rejestr kontroli pierwszych detali (FAI)</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">✅ Status kontroli (zaakceptowana, odrzucona, w toku)</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📈 Wykresy defektów per detal/forma</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">👤 Lista kontrolerów i ich aktywność</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">⏱️ Czasy kontroli i zatwierdzenia</li>
-<li style="padding: 0.5rem 0; border-bottom: 1px solid #f0eeea;">📋 Plany kontroli per produkt</li>
-<li style="padding: 0.5rem 0;">📸 Załączniki zdjęć defektów</li>
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/linea.css') }}">
+<!-- SheetJS for Excel export -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+.kj-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    margin-bottom: 1rem;
+}
+.kj-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.kj-filter-group label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-ink-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.kj-filter-group input,
+.kj-filter-group select {
+    height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 5px;
+    font-size: 0.8125rem;
+    color: var(--color-ink);
+    background: white;
+    min-width: 9rem;
+}
+.kj-filter-group input:focus,
+.kj-filter-group select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+.kj-btn-fetch {
+    height: 2rem;
+    padding: 0 1rem;
+    background: var(--color-accent);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    align-self: flex-end;
+}
+.kj-btn-fetch:hover { opacity: 0.88; }
+
+.kj-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+}
+.kj-btn-secondary {
+    height: 1.875rem;
+    padding: 0 0.875rem;
+    background: white;
+    color: var(--color-ink);
+    border: 1px solid var(--color-border);
+    border-radius: 5px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+.kj-btn-secondary:hover { background: #f8f8f8; }
+.kj-btn-graph {
+    background: #e8f4fd;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+.kj-btn-graph:hover { background: #dbeafe; }
+
+.kj-row-count {
+    margin-left: auto;
+    font-size: 0.8125rem;
+    color: var(--color-ink-subtle);
+}
+
+.kj-loading {
+    display: none;
+    padding: 2rem;
+    text-align: center;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+.kj-spinner {
+    width: 2rem; height: 2rem;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: kj-spin 0.7s linear infinite;
+    margin: 0 auto 0.75rem;
+}
+@keyframes kj-spin { to { transform: rotate(360deg); } }
+.kj-loading p { font-size: 0.875rem; color: var(--color-ink-subtle); margin: 0; }
+
+.kj-empty {
+    padding: 3rem 2rem;
+    text-align: center;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-ink-subtle);
+    font-size: 0.875rem;
+}
+
+/* Table */
+.kj-table-wrap {
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.kj-table-scroll {
+    max-height: 62vh;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+table.kj-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.6875rem;
+    table-layout: fixed;
+}
+table.kj-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+}
+table.kj-table th {
+    padding: 0.3rem 0.4rem 0.25rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-ink-subtle);
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+    user-select: none;
+}
+table.kj-table th.sortable { cursor: pointer; }
+table.kj-table th.sortable:hover { background: #f1f5f9; }
+.kj-th-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-bottom: 0.2rem;
+}
+.kj-sort-icon { color: #94a3b8; font-size: 0.625rem; }
+.kj-col-search {
+    width: 100%;
+    padding: 0.125rem 0.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: 0.625rem;
+    background: white;
+    box-sizing: border-box;
+}
+.kj-col-search:focus { outline: none; border-color: var(--color-accent); }
+select.kj-col-search { height: 1.375rem; }
+
+table.kj-table td {
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid #f1f5f9;
+    color: var(--color-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+table.kj-table tr:hover td { background: #f8fafc; }
+.kj-mis-val { color: #16a34a; font-variant-numeric: tabular-nums; }
+
+/* col widths */
+col.col-date     { width: 6.5rem; }
+col.col-time     { width: 5rem; }
+col.col-descr    { width: 14rem; }
+col.col-narrow   { width: 4.5rem; }
+col.col-mis      { width: 5.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="refined-page fade-in">
+    <header class="page-header">
+        <h1 class="page-title">Kontrola jakości – laboratorium</h1>
+    </header>
+
+    <!-- Filter bar -->
+    <form id="filterForm"
+          action="{{ url_for('placeholder.kontrola_jakosci_lab') }}"
+          method="get"
+          onsubmit="showLoading()"
+          class="kj-filter-bar">
+
+        <div class="kj-filter-group">
+            <label for="kj-articolo">Kod MOSYS (artykuł)</label>
+            <input type="text" id="kj-articolo" name="articolo"
+                   value="{{ articolo }}" placeholder="np. 12345">
+        </div>
+
+        <div class="kj-filter-group">
+            <label for="kj-date-from">Data od</label>
+            <input type="date" id="kj-date-from" name="date_from" value="{{ date_from }}">
+        </div>
+
+        <div class="kj-filter-group">
+            <label for="kj-date-to">Data do</label>
+            <input type="date" id="kj-date-to" name="date_to" value="{{ date_to }}">
+        </div>
+
+        <button type="submit" name="action" value="fetch" class="kj-btn-fetch">
+            Pobierz dane
+        </button>
+    </form>
+
+    <!-- Loading spinner -->
+    <div id="kjLoading" class="kj-loading">
+        <div class="kj-spinner"></div>
+        <p>Pobieranie danych z MOSYS...</p>
+    </div>
+
+    {% if data is not none %}
+
+        <!-- Actions row -->
+        <div class="kj-actions">
+            <button class="kj-btn-secondary" onclick="exportToCSV()">Eksport CSV</button>
+            <button class="kj-btn-secondary" onclick="exportToExcel()">Eksport Excel</button>
+            <button id="kjGraphBtn" class="kj-btn-secondary kj-btn-graph"
+                    style="display:none" onclick="openGraph()">
+                Wykres trendu
+            </button>
+            <span class="kj-row-count" id="kjRowCount">
+                Wyświetlono {{ data|length }} rekord{{ 'ów' if data|length != 1 else '' }}
+            </span>
+        </div>
+
+        <!-- Table -->
+        <div class="kj-table-wrap">
+            <div class="kj-table-scroll">
+                <table class="kj-table" id="kjTable">
+                    <colgroup>
+                        {% for col in columns %}
+                            {% if col == 'DATA_RILEVAMENTO' %}
+                                <col class="col-date">
+                            {% elif col == 'ORA_RILEVAMENTO' %}
+                                <col class="col-time">
+                            {% elif col == 'DESCRIZIONE' %}
+                                <col class="col-descr">
+                            {% elif col in ['NUMERO_STAMPATA', 'NUMERO_FIGURA'] %}
+                                <col class="col-narrow">
+                            {% else %}
+                                <col class="col-mis">
+                            {% endif %}
+                        {% endfor %}
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            {% for col in columns %}
+                            <th {% if col != 'DESCRIZIONE' %}class="sortable" onclick="sortTable({{ loop.index0 }})"{% endif %}>
+                                <div class="kj-th-inner">
+                                    <span>{{ column_labels.get(col, col) }}</span>
+                                    {% if col != 'DESCRIZIONE' %}<span class="kj-sort-icon">⇅</span>{% endif %}
+                                </div>
+                                {% if col == 'DESCRIZIONE' %}
+                                <select class="kj-col-search"
+                                        onchange="filterByDimension(this.value)"
+                                        onclick="event.stopPropagation()">
+                                    <option value="">Wszystkie wymiary</option>
+                                    {% for opt in riferimento_options %}
+                                    <option value="{{ opt.DESCRIZIONE }}"
+                                            data-nr="{{ opt.NUMERO_RIFERIMENTO }}">
+                                        {{ opt.DESCRIZIONE }}{% if opt.FLAG_RIMOSSO and opt.FLAG_RIMOSSO|int > 0 %} (usunięty){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                <input type="text" class="kj-col-search"
+                                       placeholder="Szukaj..."
+                                       onkeyup="applyAllFilters()"
+                                       onclick="event.stopPropagation()">
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in data %}
+                        <tr>
+                            {% for col in columns %}
+                            <td>
+                                {% if col.startswith('MIS') %}
+                                    {% if row[col] is not none and row[col] == row[col] %}
+                                    <span class="kj-mis-val">{{ "%.3f"|format(row[col]) }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    {{ row[col] if row[col] is not none else '' }}
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    {% else %}
+    <div class="kj-empty" id="kjEmpty">
+        Użyj filtrów powyżej i kliknij <strong>Pobierz dane</strong>, aby wyświetlić wyniki pomiarów.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function showLoading() {
+    document.getElementById('kjLoading').style.display = 'block';
+    var empty = document.getElementById('kjEmpty');
+    if (empty) empty.style.display = 'none';
+}
+
+/* ── Sorting ── */
+function sortTable(colIdx) {
+    var table = document.getElementById('kjTable');
+    var rows  = Array.from(table.tBodies[0].rows);
+    var th    = table.tHead.rows[0].cells[colIdx];
+    var asc   = th.dataset.sortDir !== 'asc';
+
+    rows.sort(function(a, b) {
+        var x = (a.cells[colIdx].textContent || '').trim();
+        var y = (b.cells[colIdx].textContent || '').trim();
+        var xn = parseFloat(x), yn = parseFloat(y);
+        if (!isNaN(xn) && !isNaN(yn)) return asc ? xn - yn : yn - xn;
+        return asc ? x.localeCompare(y) : y.localeCompare(x);
+    });
+
+    // Reset all sort icons, set current
+    Array.from(table.tHead.rows[0].cells).forEach(function(c) {
+        var icon = c.querySelector('.kj-sort-icon');
+        if (icon) icon.textContent = '⇅';
+        delete c.dataset.sortDir;
+    });
+    th.dataset.sortDir = asc ? 'asc' : 'desc';
+    var icon = th.querySelector('.kj-sort-icon');
+    if (icon) icon.textContent = asc ? '▲' : '▼';
+
+    rows.forEach(function(r) { table.tBodies[0].appendChild(r); });
+}
+
+/* ── Column filters ── */
+function filterByDimension(val) {
+    applyAllFilters();
+    // Show/hide graph button
+    var btn = document.getElementById('kjGraphBtn');
+    if (btn) btn.style.display = val ? 'inline-block' : 'none';
+}
+
+function applyAllFilters() {
+    var table   = document.getElementById('kjTable');
+    var inputs  = table.tHead.querySelectorAll('.kj-col-search');
+    var rows    = table.tBodies[0].rows;
+    var visible = 0;
+
+    for (var i = 0; i < rows.length; i++) {
+        var show = true;
+        for (var j = 0; j < inputs.length; j++) {
+            var el  = inputs[j];
+            var val = el.value;
+            if (!val) continue;
+            var cell = rows[i].cells[j];
+            if (!cell) continue;
+            var text = (cell.textContent || cell.innerText).trim();
+            if (el.tagName === 'SELECT') {
+                if (text !== val) { show = false; break; }
+            } else {
+                if (text.toLowerCase().indexOf(val.toLowerCase()) === -1) { show = false; break; }
+            }
+        }
+        rows[i].style.display = show ? '' : 'none';
+        if (show) visible++;
+    }
+
+    var countEl = document.getElementById('kjRowCount');
+    if (countEl) countEl.textContent = 'Wyświetlono ' + visible + ' rekordów';
+}
+
+/* ── Graph navigation ── */
+function openGraph() {
+    var descSelect = document.querySelector('select.kj-col-search');
+    if (!descSelect || !descSelect.value) {
+        alert('Wybierz wymiar z listy przed otwarciem wykresu.');
+        return;
+    }
+    var opt = descSelect.options[descSelect.selectedIndex];
+    var nrRif = opt.getAttribute('data-nr');
+    if (!nrRif) { alert('Brak NUMERO_RIFERIMENTO dla wybranego wymiaru.'); return; }
+
+    var p = new URLSearchParams(window.location.search);
+    var url = "{{ url_for('placeholder.kontrola_jakosci_lab_graph') }}" +
+        '?articolo='           + encodeURIComponent(p.get('articolo') || '') +
+        '&numero_riferimento=' + encodeURIComponent(nrRif) +
+        '&date_from='          + encodeURIComponent(p.get('date_from') || '') +
+        '&date_to='            + encodeURIComponent(p.get('date_to') || '');
+    window.location.href = url;
+}
+
+/* ── CSV export ── */
+function exportToCSV() {
+    var table = document.getElementById('kjTable');
+    var rows  = table.rows;
+    var csv   = [];
+
+    var hdrs = [];
+    Array.from(rows[0].querySelectorAll('th')).forEach(function(th) {
+        var span = th.querySelector('.kj-th-inner span');
+        hdrs.push('"' + (span ? span.textContent.trim() : '') + '"');
+    });
+    csv.push(hdrs.join(','));
+
+    for (var i = 1; i < rows.length; i++) {
+        if (rows[i].style.display === 'none') continue;
+        var cells = Array.from(rows[i].cells).map(function(td) {
+            return '"' + (td.textContent || '').trim().replace(/"/g, '""') + '"';
+        });
+        csv.push(cells.join(','));
+    }
+
+    var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pomiary_mosys.csv';
+    a.click();
+}
+
+/* ── Excel export ── */
+function exportToExcel() {
+    var table = document.getElementById('kjTable');
+    var rows  = table.rows;
+    var data  = [];
+
+    var hdrs = Array.from(rows[0].querySelectorAll('th')).map(function(th) {
+        var span = th.querySelector('.kj-th-inner span');
+        return span ? span.textContent.trim() : '';
+    });
+    data.push(hdrs);
+
+    for (var i = 1; i < rows.length; i++) {
+        if (rows[i].style.display === 'none') continue;
+        data.push(Array.from(rows[i].cells).map(function(td) {
+            return (td.textContent || '').trim();
+        }));
+    }
+
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = hdrs.map(function(h, ci) {
+        var max = h.length;
+        data.slice(1).forEach(function(r) { if (r[ci] && r[ci].length > max) max = r[ci].length; });
+        return { wch: Math.min(max + 2, 50) };
+    });
+    XLSX.utils.book_append_sheet(wb, ws, 'Pomiary MOSYS');
+    XLSX.writeFile(wb, 'pomiary_mosys.xlsx');
+}
+</script>
 {% endblock %}
