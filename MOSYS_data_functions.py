@@ -692,6 +692,26 @@ def get_insert_names() -> dict:
 	return {}
 
 
+def _is_mosys_writable(codice_materiale: str) -> bool:
+	"""Return True if MOSYS LOTTO_VERIFICATO should be kept in sync for this material.
+
+	Only materials whose CODICE_MATERIALE starts with a tracked prefix are written
+	back to MOSYS.  All other material types are managed externally and must not
+	have their LOTTO_VERIFICATO overwritten by LINEA.
+
+	Tracked prefixes:
+	    't' / 'T'  — surowce (raw materials, case-insensitive)
+	    'I'        — inserty (inserts, case-sensitive capital I)
+	    'HPR'      — HPR materials (case-sensitive)
+	"""
+	c = (codice_materiale or '').strip()
+	return (
+		c.lower().startswith('t')
+		or c.startswith('I')
+		or c.startswith('HPR')
+	)
+
+
 def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: str) -> bool:
 	"""Write release status back to MOSYS MATLOT.LOTTO_VERIFICATO.
 
@@ -699,14 +719,21 @@ def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: st
 	matlot_tracking.release_status remains the source of truth. This write keeps
 	MOSYS in sync for downstream systems that read LOTTO_VERIFICATO.
 
+	Skips the write silently for materials not in the tracked-prefix list
+	(see _is_mosys_writable).  Returns True in that case so callers treat it as
+	a no-op success rather than an error.
+
 	Args:
 	    codice_materiale: raw material code (CODICE_MATERIALE)
 	    lotto:            batch number (LOTTO)
-	    new_status:       new status value (e.g. 'S' for released)
+	    new_status:       new status value ('S' or 'N')
 
 	Returns:
-	    True on success, False on failure (caller should log but not block).
+	    True on success or skip, False on failure (caller should log but not block).
 	"""
+	if not _is_mosys_writable(codice_materiale):
+		return True  # silently skip — not a LINEA-managed material type
+
 	query = """
 		UPDATE STAAMPDB.MATLOT
 		SET LOTTO_VERIFICATO = ?

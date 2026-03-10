@@ -223,7 +223,9 @@ def _sync_from_mosys():
                 current_app.logger.info(
                     f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='N'"
                 )
-                # Best-effort: correct MOSYS status from its default 'S' → 'N'
+                # Best-effort: correct MOSYS status from its default 'S' → 'N'.
+                # Only applies to LINEA-managed material types (t/I/HPR prefix);
+                # other materials are managed externally and must not be touched.
                 mosys_status = str(row.get('LOTTO_VERIFICATO') or '').strip()
                 if mosys_status == 'S':
                     try:
