@@ -841,8 +841,8 @@ def kontrola_jakosci():
 
 @placeholder_bp.route('/kontrola-jakosci-lab')
 @module_required('zarzadzanie')
-def kontrola_jakosci():
-    """Kontrola jakości - under construction."""
+def kontrola_jakosci_lab():
+    """Kontrola jakości lab - under construction."""
     return render_template('placeholder/kontrola_jakosci_lab.html')
 
 @placeholder_bp.route('/admin/backfill-opis', methods=['POST'])
