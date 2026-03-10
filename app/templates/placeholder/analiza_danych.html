@@ -20,12 +20,86 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
-.nc-category-list {
+/* Date controls */
+.date-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+.date-preset-btn {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--color-ink-muted, #64748b);
+    cursor: pointer;
+    transition: all 0.1s;
+}
+.date-preset-btn:hover { background: #f8fafc; }
+.date-preset-btn.active {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #fff;
+}
+.month-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.month-nav-btn {
+    padding: 0.25rem 0.5rem;
+    background: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--color-ink-muted, #64748b);
+    line-height: 1;
+    transition: background 0.1s;
+}
+.month-nav-btn:hover { background: #f1f5f9; }
+.month-nav-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.25rem 0.625rem;
+    border-left: 1px solid var(--color-border, #e5e7eb);
+    border-right: 1px solid var(--color-border, #e5e7eb);
+    white-space: nowrap;
+    min-width: 8rem;
+    text-align: center;
+    color: var(--color-ink, #1e293b);
+}
+.date-range-inputs {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+.date-range-inputs label {
+    font-size: 0.625rem;
+    color: var(--color-ink-muted, #64748b);
+}
+.date-range-inputs input[type=date] {
+    font-size: 0.6875rem;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 3px;
+    padding: 0.2rem 0.4rem;
+    color: var(--color-ink, #1e293b);
+    background: #fff;
+}
+/* Top 10 list */
+.nc-article-list {
     list-style: none;
     margin: 0;
     padding: 0;
 }
-.nc-category-item {
+.nc-article-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -34,9 +108,7 @@
     cursor: pointer;
     transition: background 0.12s;
 }
-.nc-category-item:hover {
-    background: #f8fafc;
-}
+.nc-article-item:hover { background: #f8fafc; }
 .nc-rank {
     font-size: 0.6875rem;
     font-weight: 700;
@@ -45,14 +117,16 @@
     text-align: right;
     flex-shrink: 0;
 }
-.category-badge {
+.article-badge {
     font-size: 0.6875rem;
     font-weight: 600;
     padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    border-width: 1px;
-    border-style: solid;
+    border-radius: 3px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
     white-space: nowrap;
+    font-family: monospace;
 }
 .nc-count-label {
     font-size: 0.6875rem;
@@ -60,9 +134,12 @@
     margin-left: auto;
     white-space: nowrap;
 }
-.nc-arrow {
-    font-size: 0.6875rem;
+.nc-arrow { font-size: 0.6875rem; color: var(--color-ink-muted, #64748b); }
+/* Loading state */
+.list-loading {
+    font-size: 0.75rem;
     color: var(--color-ink-muted, #64748b);
+    padding: 0.5rem 0;
 }
 .error-banner {
     background: #fef2f2;
@@ -73,39 +150,16 @@
     font-size: 0.75rem;
     margin-bottom: 1rem;
 }
-/* Modal overrides for this page */
-#category-modal .modal-header {
-    border-bottom: 1px solid var(--color-border, #e5e7eb);
-    padding-bottom: 0.75rem;
-    margin-bottom: 0.75rem;
-}
-#category-modal .modal-subtitle {
-    font-size: 0.6875rem;
-    color: var(--color-ink-muted, #64748b);
-    margin-top: 0.2rem;
-}
-#category-modal table td,
-#category-modal table th {
-    font-size: 0.6875rem;
-}
+/* Badges in modal */
 .badge-open {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
-    font-size: 0.625rem;
-    font-weight: 600;
+    background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;
+    border-radius: 999px; padding: 0.1rem 0.45rem; font-size: 0.625rem; font-weight: 600;
 }
 .badge-closed {
-    background: #f1f5f9;
-    color: #64748b;
-    border: 1px solid #e2e8f0;
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
-    font-size: 0.625rem;
-    font-weight: 600;
+    background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;
+    border-radius: 999px; padding: 0.1rem 0.45rem; font-size: 0.625rem; font-weight: 600;
 }
+#article-modal table td, #article-modal table th { font-size: 0.6875rem; }
 </style>
 {% endblock %}
 
@@ -115,41 +169,67 @@
     <header class="page-header">
         <h1 class="page-title">Analiza danych</h1>
         <p style="font-size: 0.75rem; color: var(--color-ink-muted, #64748b); margin: 0.25rem 0 0 0;">
-            Klasyfikacja {{ total_nc_count }} niezgodności wg słów kluczowych
+            Top 10 detali wg liczby NC (MOSYS CODICE_ARTICOLO)
         </p>
     </header>
 
     {% if error_msg %}
-    <div class="error-banner">
+    <div class="error-banner" id="error-banner">
         Błąd połączenia z MOSYS: {{ error_msg }}
     </div>
     {% endif %}
 
-    <!-- Top 10 NC Groups -->
+    <!-- Top 10 Section -->
     <div class="section-card">
-        <h2>Top {{ categories_top10|length }} grup niezgodności</h2>
-        {% if categories_top10 %}
-        <ol class="nc-category-list">
-            {% for cat in categories_top10 %}
-            <li class="nc-category-item" onclick="openCategoryModal('{{ cat.name|e }}')">
-                <span class="nc-rank">{{ loop.index }}</span>
-                <span class="category-badge"
-                      style="background: {{ cat.color }}33; border-color: {{ cat.color }}66; color: {{ cat.color }};">
-                    {{ cat.name }}
-                </span>
-                <span class="nc-count-label">{{ cat.count }} NC</span>
-                <span class="nc-arrow">›</span>
-            </li>
-            {% endfor %}
-        </ol>
-        {% else %}
-        <p style="font-size: 0.75rem; color: var(--color-ink-muted, #64748b); margin: 0;">
-            {% if error_msg %}Brak danych — sprawdź połączenie z MOSYS.{% else %}Brak niezgodności do wyświetlenia.{% endif %}
-        </p>
-        {% endif %}
+        <h2>Top 10 detali z niezgodnościami</h2>
+
+        <!-- Date controls -->
+        <div class="date-controls">
+            <!-- Month nav -->
+            <div class="month-nav">
+                <button class="month-nav-btn" onclick="prevMonth()" title="Poprzedni miesiąc">&#8249;</button>
+                <span class="month-nav-label" id="month-label"></span>
+                <button class="month-nav-btn" onclick="nextMonth()" title="Następny miesiąc">&#8250;</button>
+            </div>
+
+            <!-- Presets -->
+            <button class="date-preset-btn" id="btn-7d" onclick="setPreset(7)">Ostatnie 7 dni</button>
+            <button class="date-preset-btn" id="btn-30d" onclick="setPreset(30)">Ostatnie 30 dni</button>
+
+            <!-- Custom date inputs -->
+            <div class="date-range-inputs">
+                <label>Od:</label>
+                <input type="date" id="input-date-from" onchange="onDateInputChange()">
+                <label>Do:</label>
+                <input type="date" id="input-date-to" onchange="onDateInputChange()">
+            </div>
+
+            <!-- Summary pill -->
+            <span id="summary-pill" style="font-size:0.625rem; color:var(--color-ink-muted,#64748b); margin-left:auto;"></span>
+        </div>
+
+        <!-- List -->
+        <div id="top10-container">
+            {% if top10 %}
+            <ol class="nc-article-list" id="nc-article-list">
+                {% for item in top10 %}
+                <li class="nc-article-item" onclick="openArticleModal('{{ item.name|e }}')">
+                    <span class="nc-rank">{{ loop.index }}</span>
+                    <span class="article-badge">{{ item.name }}</span>
+                    <span class="nc-count-label">{{ item.count }} NC</span>
+                    <span class="nc-arrow">›</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="list-loading" id="list-empty">
+                {% if error_msg %}Brak danych — sprawdź połączenie z MOSYS.{% else %}Brak niezgodności w wybranym okresie.{% endif %}
+            </p>
+            {% endif %}
+        </div>
     </div>
 
-    <!-- Planned features (preserved TODO list) -->
+    <!-- Planned features -->
     <div class="section-card">
         <h2>Planowane funkcjonalności</h2>
         <ul style="margin: 0; padding: 0 0 0 1.25rem; font-size: 0.6875rem; color: var(--color-ink-muted, #64748b); line-height: 1.8;">
@@ -165,35 +245,33 @@
     </div>
 </div>
 
-<!-- Category Detail Modal -->
-<div class="modal-overlay" id="category-modal" onclick="closeCategoryModalOnBackdrop(event)">
-    <div class="modal-container" style="max-width: 900px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+<!-- Article Detail Modal -->
+<div class="modal-overlay" id="article-modal" onclick="closeArticleModalOnBackdrop(event)">
+    <div class="modal-container" style="max-width: 940px; width: 96vw; max-height: 85vh; display: flex; flex-direction: column;">
         <div class="modal-header" style="display: flex; align-items: flex-start; justify-content: space-between;">
             <div>
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span id="modal-cat-badge" class="category-badge"></span>
+                    <span id="modal-art-badge" class="article-badge" style="font-size:0.8125rem;"></span>
                 </div>
-                <p class="modal-subtitle" id="modal-cat-subtitle" style="margin:0.25rem 0 0 0;"></p>
+                <p class="modal-subtitle" id="modal-art-subtitle" style="margin:0.3rem 0 0 0; font-size:0.6875rem; color:#64748b;"></p>
             </div>
-            <button onclick="closeCategoryModal()" class="modal-close-btn" title="Zamknij">
+            <button onclick="closeArticleModal()" class="modal-close-btn" title="Zamknij">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
         <div class="modal-body" id="modal-body" style="overflow-y: auto; flex: 1; padding: 0;">
-            <div id="modal-loading" style="text-align: center; padding: 2rem; font-size: 0.75rem; color: #64748b;">
-                Ładowanie...
-            </div>
-            <table class="refined-table" id="modal-table" style="display:none; width: 100%;">
+            <div id="modal-loading" style="text-align:center; padding:2rem; font-size:0.75rem; color:#64748b;">Ładowanie...</div>
+            <table class="refined-table" id="modal-table" style="display:none; width:100%;">
                 <colgroup>
-                    <col style="width: 10%;">  <!-- Nr NC -->
-                    <col style="width: 10%;">  <!-- Commessa -->
-                    <col style="width: 9%;">   <!-- Data NC -->
-                    <col style="width: 7%;">   <!-- Status -->
-                    <col style="width: 8%;">   <!-- Zabl. qty -->
-                    <col style="width: 46%;">  <!-- Opis -->
-                    <col style="width: 10%;">  <!-- Selekcja -->
+                    <col style="width:11%;">  <!-- Nr NC -->
+                    <col style="width:11%;">  <!-- Commessa -->
+                    <col style="width:9%;">   <!-- Data NC -->
+                    <col style="width:8%;">   <!-- Status -->
+                    <col style="width:8%;">   <!-- Zabl. qty -->
+                    <col style="width:43%;">  <!-- Opis -->
+                    <col style="width:10%;">  <!-- Selekcja -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -215,26 +293,169 @@
 
 {% block extra_scripts %}
 <script>
+// ── State ───────────────────────────────────────────────────────────────────
+const MONTHS_PL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec',
+                   'Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+
+// Server-provided initial values
+let dateFrom = '{{ date_from }}';
+let dateTo   = '{{ date_to }}';
+
+// Month nav state (tracks displayed month even when in preset mode)
+let navYear  = new Date(dateTo).getFullYear();
+let navMonth = new Date(dateTo).getMonth(); // 0-indexed
+
+// ── Utilities ───────────────────────────────────────────────────────────────
 function escapeHtml(str) {
     if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function openCategoryModal(name) {
-    const modal = document.getElementById('category-modal');
+function fmtDate(d) {
+    // Format JS Date to YYYY-MM-DD local time
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+}
+
+function lastDayOfMonth(year, month) {
+    return new Date(year, month + 1, 0).getDate();
+}
+
+function syncInputs() {
+    document.getElementById('input-date-from').value = dateFrom;
+    document.getElementById('input-date-to').value = dateTo;
+    // Update month nav label to reflect the dateTo month
+    const d = new Date(dateTo + 'T00:00:00');
+    navYear  = d.getFullYear();
+    navMonth = d.getMonth();
+    document.getElementById('month-label').textContent = MONTHS_PL[navMonth] + ' ' + navYear;
+}
+
+function setActivePreset(id) {
+    ['btn-7d','btn-30d'].forEach(b => document.getElementById(b).classList.remove('active'));
+    if (id) document.getElementById(id).classList.add('active');
+}
+
+// ── Date presets ─────────────────────────────────────────────────────────────
+function setPreset(days) {
+    const today = new Date();
+    dateTo   = fmtDate(today);
+    const from = new Date(today);
+    from.setDate(today.getDate() - (days - 1));
+    dateFrom = fmtDate(from);
+    setActivePreset(days === 7 ? 'btn-7d' : 'btn-30d');
+    syncInputs();
+    loadTop10();
+}
+
+// ── Month navigation ──────────────────────────────────────────────────────────
+function updateMonthLabel() {
+    document.getElementById('month-label').textContent = MONTHS_PL[navMonth] + ' ' + navYear;
+}
+
+function applyMonth() {
+    dateFrom = `${navYear}-${String(navMonth+1).padStart(2,'0')}-01`;
+    const last = lastDayOfMonth(navYear, navMonth);
+    dateTo   = `${navYear}-${String(navMonth+1).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+    setActivePreset(null);
+    document.getElementById('input-date-from').value = dateFrom;
+    document.getElementById('input-date-to').value   = dateTo;
+    loadTop10();
+}
+
+function prevMonth() {
+    navMonth--;
+    if (navMonth < 0) { navMonth = 11; navYear--; }
+    updateMonthLabel();
+    applyMonth();
+}
+
+function nextMonth() {
+    navMonth++;
+    if (navMonth > 11) { navMonth = 0; navYear++; }
+    updateMonthLabel();
+    applyMonth();
+}
+
+// ── Custom date inputs ────────────────────────────────────────────────────────
+function onDateInputChange() {
+    const from = document.getElementById('input-date-from').value;
+    const to   = document.getElementById('input-date-to').value;
+    if (from && to) {
+        dateFrom = from;
+        dateTo   = to;
+        setActivePreset(null);
+        const d = new Date(dateTo + 'T00:00:00');
+        navYear  = d.getFullYear();
+        navMonth = d.getMonth();
+        updateMonthLabel();
+        loadTop10();
+    }
+}
+
+// ── Top 10 AJAX ───────────────────────────────────────────────────────────────
+function loadTop10() {
+    const container = document.getElementById('top10-container');
+    container.innerHTML = '<p class="list-loading">Ładowanie...</p>';
+    document.getElementById('summary-pill').textContent = '';
+
+    fetch(`/api/analiza-top10?date_from=${dateFrom}&date_to=${dateTo}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                container.innerHTML = `<p class="list-loading" style="color:#991b1b;">Błąd: ${escapeHtml(data.error)}</p>`;
+                return;
+            }
+            renderTop10(data.top10, data.total_nc_count);
+        })
+        .catch(err => {
+            container.innerHTML = `<p class="list-loading" style="color:#991b1b;">Błąd sieci: ${escapeHtml(String(err))}</p>`;
+        });
+}
+
+function renderTop10(items, totalCount) {
+    const container = document.getElementById('top10-container');
+    document.getElementById('summary-pill').textContent = totalCount + ' NC łącznie';
+
+    if (!items || items.length === 0) {
+        container.innerHTML = '<p class="list-loading">Brak niezgodności w wybranym okresie.</p>';
+        return;
+    }
+
+    const ol = document.createElement('ol');
+    ol.className = 'nc-article-list';
+    ol.id = 'nc-article-list';
+
+    items.forEach((item, idx) => {
+        const li = document.createElement('li');
+        li.className = 'nc-article-item';
+        li.onclick = () => openArticleModal(item.name);
+        li.innerHTML =
+            `<span class="nc-rank">${idx+1}</span>` +
+            `<span class="article-badge">${escapeHtml(item.name)}</span>` +
+            `<span class="nc-count-label">${item.count} NC</span>` +
+            `<span class="nc-arrow">›</span>`;
+        ol.appendChild(li);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(ol);
+}
+
+// ── Article modal ────────────────────────────────────────────────────────────
+function openArticleModal(name) {
+    const modal = document.getElementById('article-modal');
     modal.classList.add('active');
-    document.getElementById('modal-cat-badge').textContent = name;
-    document.getElementById('modal-cat-badge').removeAttribute('style');
-    document.getElementById('modal-cat-subtitle').textContent = '';
+    document.getElementById('modal-art-badge').textContent = name;
+    document.getElementById('modal-art-subtitle').textContent = '';
     document.getElementById('modal-loading').style.display = 'block';
     document.getElementById('modal-table').style.display = 'none';
     document.getElementById('modal-tbody').innerHTML = '';
 
-    fetch('/api/nc-category-details/' + encodeURIComponent(name))
+    const url = `/api/nc-article-details/${encodeURIComponent(name)}?date_from=${dateFrom}&date_to=${dateTo}`;
+    fetch(url)
         .then(r => r.json())
         .then(data => {
             document.getElementById('modal-loading').style.display = 'none';
@@ -243,51 +464,36 @@ function openCategoryModal(name) {
                 document.getElementById('modal-loading').textContent = 'Błąd: ' + escapeHtml(data.error);
                 return;
             }
+            document.getElementById('modal-art-subtitle').textContent =
+                data.count + ' niezgodności w wybranym okresie';
 
-            // Update header
-            const badge = document.getElementById('modal-cat-badge');
-            badge.textContent = data.category;
-            badge.style.background = data.color + '33';
-            badge.style.borderColor = data.color + '66';
-            badge.style.color = data.color;
-
-            document.getElementById('modal-cat-subtitle').textContent =
-                data.count + ' niezgodności w tej kategorii';
-
-            // Build rows
             const tbody = document.getElementById('modal-tbody');
             tbody.innerHTML = '';
             data.ncs.forEach(nc => {
                 const statusBadge = nc.is_open
                     ? '<span class="badge-open">Otwarte</span>'
                     : '<span class="badge-closed">Zamknięte</span>';
-
                 const blockedStr = nc.blocked_qty > 0
                     ? nc.blocked_qty.toLocaleString('pl-PL')
                     : '<span style="color:#cbd5e1;">—</span>';
-
                 let sortingStr = '<span style="color:#cbd5e1;">—</span>';
                 if (nc.sorting) {
-                    const s = nc.sorting;
-                    sortingStr = s.qty_checked.toLocaleString('pl-PL') + ' szt. / ' + s.scrap_rate + '% brk';
+                    sortingStr = nc.sorting.qty_checked.toLocaleString('pl-PL') + ' szt. / ' + nc.sorting.scrap_rate + '% brk';
                 }
-
-                const shortNotes = nc.notes_text.length > 80
+                const shortNotes = (nc.notes_text || '').length > 80
                     ? nc.notes_text.substring(0, 80) + '…'
-                    : nc.notes_text;
-
+                    : (nc.notes_text || '');
                 const tr = document.createElement('tr');
                 tr.innerHTML =
-                    '<td style="font-weight:600;">' + escapeHtml(nc.nr_niezgodnosci) + '</td>' +
-                    '<td>' + escapeHtml(nc.commessa) + '</td>' +
-                    '<td>' + escapeHtml(nc.data_nc) + '</td>' +
-                    '<td>' + statusBadge + '</td>' +
-                    '<td style="text-align:right;">' + blockedStr + '</td>' +
-                    '<td title="' + escapeHtml(nc.notes_text) + '">' + escapeHtml(shortNotes) + '</td>' +
-                    '<td>' + sortingStr + '</td>';
+                    `<td style="font-weight:600;">${escapeHtml(nc.nr_niezgodnosci)}</td>` +
+                    `<td>${escapeHtml(nc.commessa)}</td>` +
+                    `<td>${escapeHtml(nc.data_nc)}</td>` +
+                    `<td>${statusBadge}</td>` +
+                    `<td style="text-align:right;">${blockedStr}</td>` +
+                    `<td title="${escapeHtml(nc.notes_text)}">${escapeHtml(shortNotes)}</td>` +
+                    `<td>${sortingStr}</td>`;
                 tbody.appendChild(tr);
             });
-
             document.getElementById('modal-table').style.display = '';
         })
         .catch(err => {
@@ -296,18 +502,29 @@ function openCategoryModal(name) {
         });
 }
 
-function closeCategoryModal() {
-    document.getElementById('category-modal').classList.remove('active');
+function closeArticleModal() {
+    document.getElementById('article-modal').classList.remove('active');
 }
 
-function closeCategoryModalOnBackdrop(event) {
-    if (event.target === document.getElementById('category-modal')) {
-        closeCategoryModal();
-    }
+function closeArticleModalOnBackdrop(event) {
+    if (event.target === document.getElementById('article-modal')) closeArticleModal();
 }
 
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeCategoryModal();
-});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeArticleModal(); });
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+(function init() {
+    syncInputs();
+    // Mark initial preset (server always starts with last 7 days unless custom params given)
+    // Compare dateRange to check which preset matches
+    const today = new Date();
+    const d7from = fmtDate(new Date(new Date().setDate(today.getDate() - 6)));
+    const d30from = fmtDate(new Date(new Date().setDate(today.getDate() - 29)));
+    const todayStr = fmtDate(today);
+    if (dateTo === todayStr && dateFrom === d7from) setActivePreset('btn-7d');
+    else if (dateTo === todayStr && dateFrom === d30from) setActivePreset('btn-30d');
+    // Update summary pill with server-rendered count
+    document.getElementById('summary-pill').textContent = '{{ total_nc_count }} NC łącznie';
+})();
 </script>
 {% endblock %}

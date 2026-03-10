@@ -560,25 +560,41 @@ def get_blocked_boxes_details(nr_niezgodnosci: str) -> list:
 
 
 # noinspection D
-def get_all_notcojan_for_analysis() -> list:
-    """Fetch ALL NOTCOJAN rows and aggregate per NUMERO_NC for NC classification.
+def get_all_notcojan_for_analysis(date_from: str = None, date_to: str = None) -> list:
+    """Fetch NOTCOJAN rows and aggregate per NUMERO_NC for NC classification.
+
+    Args:
+        date_from: YYYYMMDD string — filter NOTCOJAN.DATA >= date_from (inclusive)
+        date_to:   YYYYMMDD string — filter NOTCOJAN.DATA <= date_to (inclusive)
 
     Joins all NOTE_01..NOTE_10 fields from every row of a given NC into one
-    combined text block used for keyword matching.
+    combined text block used for keyword matching. Also resolves COMMESSA to
+    CODICE_ARTICOLO via COLLAUDO in a single batch query.
 
     Returns:
-        list of dicts: {nr_niezgodnosci, commessa, data_nc, notes_text}
+        list of dicts: {nr_niezgodnosci, commessa, codice_articolo, data_nc, notes_text}
         Empty list on MOSYS connection error (graceful degradation).
     """
-    query = '''
+    where_parts = []
+    params_list = []
+    if date_from:
+        where_parts.append("NOTCOJAN.DATA >= ?")
+        params_list.append(date_from)
+    if date_to:
+        where_parts.append("NOTCOJAN.DATA <= ?")
+        params_list.append(date_to)
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
+    query = f'''
         SELECT NOTCOJAN.NUMERO_NC, NOTCOJAN.COMMESSA, NOTCOJAN.DATA,
                NOTCOJAN.NOTE_01, NOTCOJAN.NOTE_02, NOTCOJAN.NOTE_03, NOTCOJAN.NOTE_04, NOTCOJAN.NOTE_05,
                NOTCOJAN.NOTE_06, NOTCOJAN.NOTE_07, NOTCOJAN.NOTE_08, NOTCOJAN.NOTE_09, NOTCOJAN.NOTE_10
         FROM STAAMPDB.NOTCOJAN NOTCOJAN
+        {where_sql}
         ORDER BY NOTCOJAN.NUMERO_NC ASC, NOTCOJAN.DATA ASC, NOTCOJAN.ORA ASC
     '''
     try:
-        df = get_pervasive(query)
+        df = get_pervasive(query, tuple(params_list) if params_list else None)
         if df.empty:
             return []
 
@@ -609,12 +625,33 @@ def get_all_notcojan_for_analysis() -> list:
                 }
             nc_map[nr]['notes_parts'].extend(note_parts)
 
+        # Batch-resolve COMMESSA → CODICE_ARTICOLO via COLLAUDO
+        commessa_set = {d['commessa'] for d in nc_map.values() if d['commessa']}
+        commessa_to_articolo = {}
+        if commessa_set:
+            try:
+                ph = ','.join(['?' for _ in commessa_set])
+                q_art = f'''
+                    SELECT DISTINCT COLLAUDO.COMMESSA, COLLAUDO.ARTICOLO
+                    FROM STAAMPDB.COLLAUDO COLLAUDO
+                    WHERE COLLAUDO.COMMESSA IN ({ph})
+                '''
+                df_art = get_pervasive(q_art, tuple(commessa_set))
+                if not df_art.empty:
+                    commessa_to_articolo = dict(zip(df_art['COMMESSA'], df_art['ARTICOLO']))
+            except Exception as e:
+                print(f"[get_all_notcojan_for_analysis] ARTICOLO lookup error: {e}")
+
         # Build final list — join all note fragments per NC
         results = []
         for nr, data in nc_map.items():
+            commessa = data['commessa']
+            raw_art = commessa_to_articolo.get(commessa, '')
+            codice_articolo = str(raw_art).strip() if raw_art else ''
             results.append({
                 'nr_niezgodnosci': data['nr_niezgodnosci'],
-                'commessa': data['commessa'],
+                'commessa': commessa,
+                'codice_articolo': codice_articolo,
                 'data_nc': data['data_nc'],
                 'notes_text': ' '.join(data['notes_parts']),
             })
