@@ -661,6 +661,37 @@ def get_insert_codes() -> set:
 		return set()
 
 
+def get_insert_names() -> dict:
+	"""Return a dict of {codice: name} for all INSERTI records.
+
+	Uses a direct SELECT (no JOIN) so that Python-side stripping handles any
+	fixed-length CHAR padding that would silently break a SQL JOIN equality.
+
+	Tries DESCRIZIONE first; falls back to NOME_COMMERCIALE if DESCRIZIONE
+	is absent or yields no results (different MOSYS installations may differ).
+
+	Returns:
+	    dict mapping stripped codice strings to their display names; {} on error.
+	"""
+	for name_col in ('DESCRIZIONE', 'NOME_COMMERCIALE'):
+		try:
+			query = f"SELECT CODICE, {name_col} AS NOME FROM STAAMPDB.INSERTI"
+			df = get_pervasive(query)
+			if df is None or df.empty:
+				continue
+			result = {}
+			for _, row in df.iterrows():
+				codice = str(row.get('CODICE') or '').strip()
+				nome   = str(row.get('NOME')   or '').strip()
+				if codice and nome:
+					result[codice] = nome
+			if result:
+				return result
+		except Exception:
+			continue
+	return {}
+
+
 def update_matlot_lotto_status(codice_materiale: str, lotto: str, new_status: str) -> bool:
 	"""Write release status back to MOSYS MATLOT.LOTTO_VERIFICATO.
 

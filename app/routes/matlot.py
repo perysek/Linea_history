@@ -122,16 +122,34 @@ def _sync_from_mosys():
                 if codice_key and inserti_desc:
                     _insert_codes.add(codice_key)
 
-        # Build _material_names from the JOIN data (NOME_COMMERCIALE / INSERTI_DESCRIZIONE).
+        # Build _material_names from the JOIN data (NOME_COMMERCIALE for surowce).
         for _, row in df.iterrows():
-            codice_key   = str(row.get('CODICE_MATERIALE')    or '').strip()
-            nome         = str(row.get('NOME_COMMERCIALE')    or '').strip()
-            inserti_desc = str(row.get('INSERTI_DESCRIZIONE') or '').strip()
+            codice_key   = str(row.get('CODICE_MATERIALE') or '').strip()
+            nome         = str(row.get('NOME_COMMERCIALE') or '').strip()
             if not codice_key:
                 continue
-            display_name = nome or inserti_desc
-            if display_name:
-                _material_names[codice_key] = display_name
+            if nome:
+                _material_names[codice_key] = nome
+
+        # Supplement with a direct INSERTI lookup for insert names.
+        # The JOIN-based INSERTI_DESCRIZIONE is unreliable when Pervasive SQL stores
+        # INSERTI.CODICE as a fixed-length CHAR field: trailing-space padding silently
+        # breaks the JOIN equality, so the column returns NULL even though the codes
+        # match after stripping.  get_insert_names() uses a direct SELECT and strips
+        # both sides in Python, bypassing the JOIN mismatch entirely.
+        try:
+            from MOSYS_data_functions import get_insert_names
+            insert_names = get_insert_names()
+            for codice, name in insert_names.items():
+                if name:
+                    _material_names[codice] = name
+            current_app.logger.info(
+                f"MATLOT sync: loaded {len(insert_names)} insert names from INSERTI"
+            )
+        except Exception as e:
+            current_app.logger.warning(
+                f"MATLOT sync: insert names lookup failed (non-fatal): {e}"
+            )
 
         for _, row in df.iterrows():
             codice = str(row.get('CODICE_MATERIALE') or '').strip()
