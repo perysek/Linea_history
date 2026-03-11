@@ -208,34 +208,46 @@ def _sync_from_mosys():
             ).first()
 
             if tracking is None:
-                # Always seed as 'N' (pending). MOSYS incorrectly defaults
-                # LOTTO_VERIFICATO='S' for every new batch, so its value is
-                # not reliable for seeding. LINEA is the source of truth.
-                tracking = MatlotTracking(
-                    codice_materiale=codice,
-                    lotto=lotto,
-                    box=box,
-                    prima_vista=today,
-                    release_status='N',
-                    giacenza_lotto=giacenza,
-                )
-                db.session.add(tracking)
-                current_app.logger.info(
-                    f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='N'"
-                )
-                # Best-effort: correct MOSYS status from its default 'S' → 'N'.
-                # Only applies to LINEA-managed material types (t/I/HPR prefix);
-                # other materials are managed externally and must not be touched.
                 mosys_status = str(row.get('LOTTO_VERIFICATO') or '').strip()
-                if mosys_status == 'S':
-                    try:
-                        from MOSYS_data_functions import update_matlot_lotto_status
-                        update_matlot_lotto_status(codice, lotto, 'N')
-                    except Exception as mosys_err:
-                        current_app.logger.warning(
-                            f"MATLOT could not reset MOSYS status for new batch "
-                            f"{codice}/{lotto}@{box}: {mosys_err}"
-                        )
+
+                if codice in _insert_codes and mosys_status == 'S':
+                    # Insert already approved in MOSYS: the batch was previously
+                    # released and has now reappeared under a new composite key
+                    # (BOX_X/Y/Z coordinates changed). Do not create a tracking
+                    # row and do not touch MOSYS — the existing approval stands.
+                    current_app.logger.info(
+                        f"MATLOT insert already approved in MOSYS: "
+                        f"{codice}/{lotto}@{box} → not tracked"
+                    )
+                else:
+                    # Surowiec (any MOSYS status) or insert with MOSYS 'N':
+                    # seed as 'N' (pending). MOSYS incorrectly defaults
+                    # LOTTO_VERIFICATO='S' for every new batch, so its value
+                    # is not reliable for seeding. LINEA is the source of truth.
+                    tracking = MatlotTracking(
+                        codice_materiale=codice,
+                        lotto=lotto,
+                        box=box,
+                        prima_vista=today,
+                        release_status='N',
+                        giacenza_lotto=giacenza,
+                    )
+                    db.session.add(tracking)
+                    current_app.logger.info(
+                        f"MATLOT new batch: {codice}/{lotto}@{box} → release_status='N'"
+                    )
+                    # Best-effort: correct MOSYS status from its default 'S' → 'N'.
+                    # Applies to surowce only — inserty showing 'S' are handled
+                    # above (skipped) and never reach this branch.
+                    if mosys_status == 'S':
+                        try:
+                            from MOSYS_data_functions import update_matlot_lotto_status
+                            update_matlot_lotto_status(codice, lotto, 'N')
+                        except Exception as mosys_err:
+                            current_app.logger.warning(
+                                f"MATLOT could not reset MOSYS status for new batch "
+                                f"{codice}/{lotto}@{box}: {mosys_err}"
+                            )
             else:
                 pass  # existing row — no fields refreshed on re-sync
 
